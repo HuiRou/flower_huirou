@@ -227,10 +227,8 @@ class SimpleClientManager(ClientManager):
         #cluster = AgglomerativeClustering(n_clusters=None, distance_threshold=0, compute_distances=True).fit(weights)
         #cluster = KMeans(n_clusters=2, n_init='auto').fit(weights)
         labels = cluster.labels_
-        #centers = kmeans.cluster_centers_
         print(labels)
         print(cluster.n_leaves_)
-        #print(cluster.children_)
         print(cluster.distances_)
         plt.title('Hierarchical Clustering Dendrogram')
         # plot the top three levels of the dendrogram
