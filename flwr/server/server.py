@@ -40,6 +40,12 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.server.history import History
 from flwr.server.strategy import FedAvg, Strategy
 
+#from actor_critic import Actor, Critic
+from rl.agents import DQNAgent
+from rl.policy import BoltzmannQPolicy
+from rl.memory import SequentialMemory
+#from flwr.server.env import SelectEnv
+
 FitResultsAndFailures = Tuple[
     List[Tuple[ClientProxy, FitRes]],
     List[Union[Tuple[ClientProxy, FitRes], BaseException]],
@@ -54,6 +60,113 @@ ReconnectResultsAndFailures = Tuple[
 ]
 
 
+g_timeout = 0
+g_current_round = 0
+g_num_round = 0
+g_history = None
+
+class SelectEnv:
+    def __init__(self):
+        # Actions we can take, down, stay, up
+        self.action_space = []
+        # Temperature array
+        #self.observation_space = Box(low=np.array([0]), high=np.array([100]))
+        # Set start temp
+        self.action = []
+        self.state = []
+        # Set shower length
+        self.acc = 0.4 #use to control done's condition
+        self.fit = None
+        self.evaluate = None
+        self.server = None
+        
+    def step(self, action):
+        print(action)
+        self.action = self.action_space[action]
+        #agg_models = [models[i] for i in range(len(actions)) if actions[i] == 1]
+        #parameters_aggregated = aggregate(agg_models)     
+        #global global_model   
+        #global_model.set_weights(parameters_aggregated)
+        #(x_train, y_train), (x_test, y_test) = data_load(999)
+        #loss, accuracy = global_model.evaluate(x_test, y_test)
+
+        #print(f'Aggregate, loss: {loss}, accuracy: {accuracy}')
+        
+        global g_history
+        global g_timeout
+        global g_current_round
+        global g_num_round
+
+        log(INFO, "training")
+        res_fit = server.fit_round(server_round=g_current_round, timeout=g_timeout)
+        if res_fit:
+            parameters_prime, _, _ = res_fit  # fit_metrics_aggregated
+            if parameters_prime:
+                server.parameters = parameters_prime
+
+        # Evaluate model on a sample of available clients
+        log(INFO, "Evaluate 2")
+        res_fed = server.evaluate_round(server_round=g_current_round, timeout=g_timeout)
+        if res_fed:
+            loss_fed, evaluate_metrics_fed, _ = res_fed
+            if loss_fed:
+                g_history.add_loss_distributed(
+                    server_round=g_current_round, loss=loss_fed
+                )
+                g_history.add_metrics_distributed(
+                    server_round=g_current_round, metrics=evaluate_metrics_fed
+                )
+
+        g_current_round += 1
+
+        # Calculate reward
+        #if accuracy >= self.acc and self.state <=39: 
+        #    reward =1 
+        #else: 
+        #    reward = -1 
+        reward = 1 - loss_fed*100
+
+        # Check if is done
+        if reward >= self.acc or g_current_round >= g_num_round: 
+            done = True
+        else:
+            done = False
+        
+        # Apply temperature noise
+        #self.state += random.randint(-1,1)
+        # Set placeholder for info
+        info = {}
+
+        states = self.state
+        # Return step information
+        return states, reward, done, info
+
+    def render(self):
+        # Implement viz
+        pass
+    
+    def reset(self):
+        # Reset shower temperature
+        #self.state = 38 + random.randint(-3,3)
+        # Reset shower time
+        #self.shower_length = 60 
+        return self.state
+
+    def build_model(states, actions):
+        model = Sequential()
+        model.add(Flatten(input_shape=(1,states)))
+        model.add(Dense(24, activation='relu'))
+        model.add(Dense(24, activation='relu'))
+        model.add(Dense(actions, activation='linear'))
+        return model
+
+    def build_agent(model, actions):
+        policy = BoltzmannQPolicy()
+        memory = SequentialMemory(limit=50000, window_length=1)
+        dqn = DQNAgent(model=model, memory=memory, policy=policy, 
+                    nb_actions=actions, nb_steps_warmup=10, target_model_update=1e-2)
+        return dqn
+
 class Server:
     """Flower server."""
 
@@ -66,7 +179,8 @@ class Server:
         )
         self.strategy: Strategy = strategy if strategy is not None else FedAvg()
         self.max_workers: Optional[int] = None
-
+        self.env = SelectEnv()
+    
     def set_max_workers(self, max_workers: Optional[int]) -> None:
         """Set the max_workers used by ThreadPoolExecutor."""
         self.max_workers = max_workers
@@ -82,7 +196,15 @@ class Server:
     # pylint: disable=too-many-locals
     def fit(self, num_rounds: int, timeout: Optional[float]) -> History:
         """Run federated averaging for a number of rounds."""
-        history = History()
+        global g_history
+        g_history = History()
+
+        global g_timeout
+        global g_current_round
+        global g_num_round
+
+        g_timeout = timeout
+        g_num_round = num_rounds
 
         # Initialize parameters
         log(INFO, "Initializing global parameters")
@@ -96,17 +218,30 @@ class Server:
                 res[0],
                 res[1],
             )
-            history.add_loss_centralized(server_round=0, loss=res[0])
-            history.add_metrics_centralized(server_round=0, metrics=res[1])
+            g_history.add_loss_centralized(server_round=0, loss=res[0])
+            g_history.add_metrics_centralized(server_round=0, metrics=res[1])
+
 
         # Run federated learning for num_rounds
         log(INFO, "FL starting 0")
         start_time = timeit.default_timer()
         log(INFO, "FL starting round")
 
-        for current_round in range(1, num_rounds + 1):
+        client_num = len(self._client_manager)
+        fm = '{:0' + str(client_num) + 'b}'
+        for i in range(pow(2, client_num)):
+            b = fm.format(i)
+            l = list(map(int, b))
+            if l.count(1) >= client_num/3:
+                self.env.action_space.append(l)
+
+        for current_round in range(1, 2): #1, num_rounds + 1
+            
             log(INFO, f'current_round: {current_round}')
             # Train model and replace previous global model
+
+            g_current_round = current_round
+
             log(INFO, "training")
             res_fit = self.fit_round(server_round=current_round, timeout=timeout)
             if res_fit:
@@ -114,7 +249,7 @@ class Server:
                 if parameters_prime:
                     self.parameters = parameters_prime
 
-            # Evaluate model using strategy implementation
+            #Evaluate model using strategy implementation
             log(INFO, "Evaluate 1")
             res_cen = self.strategy.evaluate(current_round, parameters=self.parameters)
             if res_cen is not None:
@@ -127,8 +262,8 @@ class Server:
                     metrics_cen,
                     timeit.default_timer() - start_time,
                 )
-                history.add_loss_centralized(server_round=current_round, loss=loss_cen)
-                history.add_metrics_centralized(
+                g_history.add_loss_centralized(server_round=current_round, loss=loss_cen)
+                g_history.add_metrics_centralized(
                     server_round=current_round, metrics=metrics_cen
                 )
 
@@ -138,18 +273,46 @@ class Server:
             if res_fed:
                 loss_fed, evaluate_metrics_fed, _ = res_fed
                 if loss_fed:
-                    history.add_loss_distributed(
+                    g_history.add_loss_distributed(
                         server_round=current_round, loss=loss_fed
                     )
-                    history.add_metrics_distributed(
+                    g_history.add_metrics_distributed(
                         server_round=current_round, metrics=evaluate_metrics_fed
                     )
+
+                
+                ############    ####          
+                ############    ####
+                ####            ####
+                ####            ####
+    ########    ############    ####            ########
+    ########    ############    ####            ########
+                ####            ####
+                ####            ####
+                ####            ############
+                ####            ############
+
+        self.env.server = self
+        self.env.state = self._client_manager.build_distance_matrix()
+        state_len = len(self.env.state)
+        action_len = len(self.env.action_space)
+        fl_model = self.env.build_model(state_len, action_len)
+        dqn = self.env.build_agent(fl_model, action_len)
+        dqn.compile(Adam(lr=1e-3), metrics=['mae'])
+        dqn.fit(env, nb_steps=num_rounds, visualize=False, verbose=1)
+        print("SCORES")
+        scores = dqn.test(env, nb_episodes=3, visualize=False)
+        print(np.mean(scores.history['episode_reward']))
+
+
+
+    ####################################################################################  
 
         # Bookkeeping
         end_time = timeit.default_timer()
         elapsed = end_time - start_time
         log(INFO, "FL finished in %s", elapsed)
-        return history
+        return g_history
 
     def evaluate_round(
         self,
@@ -208,7 +371,7 @@ class Server:
         Tuple[Optional[Parameters], Dict[str, Scalar], FitResultsAndFailures]
     ]:
         """Perform a single round of federated averaging."""
-        
+
         # Get clients and their respective instructions from strategy
         client_instructions = self.strategy.configure_fit(
             server_round=server_round,
@@ -234,8 +397,6 @@ class Server:
             timeout=timeout,
         )
 
-        self._client_manager.clustering()
-
         log(
             DEBUG,
             "fit_round %s received %s results and %s failures",
@@ -251,7 +412,7 @@ class Server:
         ] = self.strategy.aggregate_fit(server_round, results, failures)
 
         parameters_aggregated, metrics_aggregated = aggregated_result
-        return parameters_aggregated, metrics_aggregated, (results, failures)
+        return parameters_aggregated, metrics_aggregated, (results, failures)    
 
     def disconnect_all_clients(self, timeout: Optional[float]) -> None:
         """Send shutdown signal to all clients."""
@@ -284,6 +445,8 @@ class Server:
         log(INFO, "Received initial parameters from one random client")
         return get_parameters_res.parameters
 
+
+######## main ########
 
 def reconnect_clients(
     client_instructions: List[Tuple[ClientProxy, ReconnectIns]],
@@ -447,3 +610,7 @@ def _handle_finished_future_after_evaluate(
 
     # Not successful, client returned a result where the status code is not OK
     failures.append(result)
+
+
+
+

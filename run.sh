@@ -1,7 +1,7 @@
 #!/bin/bash
 
-client_num=8
-comm_round=2
+client_num=3
+comm_round=5
 
 
 echo "Starting server"

@@ -28,6 +28,7 @@ from flwr.proto.transport_pb2 import (
 )
 
 from . import typing
+import numpy
 
 # pylint: disable=missing-function-docstring
 
@@ -331,6 +332,9 @@ def scalar_to_proto(scalar: typing.Scalar) -> Scalar:
         return Scalar(bytes=scalar)
 
     if isinstance(scalar, float):
+        return Scalar(double=scalar)
+
+    if isinstance(scalar, numpy.float32):
         return Scalar(double=scalar)
 
     if isinstance(scalar, int):

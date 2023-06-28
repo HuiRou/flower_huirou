@@ -42,6 +42,9 @@ from flwr.common.logger import log
 
 from .client_proxy import ClientProxy
 from .criterion import Criterion
+
+from sklearn.metrics import pairwise_distances
+
 from sklearn.cluster import KMeans, AgglomerativeClustering
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import dendrogram
@@ -107,7 +110,6 @@ class ClientManager(ABC):
 class SimpleClientManager(ClientManager):
     """Provides a pool of available clients."""
 
-    client_weight = {}
 
     def __init__(self) -> None:
         self.clients: Dict[str, ClientProxy] = {}
@@ -142,7 +144,7 @@ class SimpleClientManager(ClientManager):
             return False
 
         self.clients[client.cid] = client
-        self.client_weight[client.cid] = None
+        #self.client_weight[client.cid] = None
         with self._cv:
             self._cv.notify_all()
 
@@ -191,9 +193,31 @@ class SimpleClientManager(ClientManager):
             )
             return []
 
-        sampled_cids = random.sample(available_cids, num_clients)
-        
+        #sampled_cids = random.sample(available_cids, num_clients)
+        sampled_cids = available_cids
+
         return [self.clients[cid] for cid in sampled_cids]
+
+    def build_distance_matrix(self):
+        log(INFO, "build_distance_matrix")   
+        print(self.clients)     
+        print(self.clients.keys())
+        ins = GetParametersIns(config={})
+        weight = []
+        weights = []
+        result_list = []
+        client_weight = {}
+        for cid in self.clients.keys():
+            res = self.clients[cid].get_parameters(ins=ins, timeout=None)
+            weight = parameters_to_ndarrays(res.parameters)
+            result_list = []
+            for i in range(len(weight)):
+                result = weight[i].flatten() # to 1D
+                result_list.extend(result)
+            weights.append(result_list)
+        distance_matrix = pairwise_distances(weights, metric='euclidean')
+        print(distance_matrix)
+
 
     def clustering(self):
         log(INFO, "Clustering")        
@@ -201,8 +225,10 @@ class SimpleClientManager(ClientManager):
         weight = []
         weights = []
         gradients = []
+        client_list = []
         for client in self.clients.values(): #client -> ClientProxy
             log(INFO, "Requesting parameters from client: " + str(client.cid))
+            client_list.append(client.cid[-5:])
             res = client.get_parameters(ins=ins, timeout=None)
             weight = parameters_to_ndarrays(res.parameters)
             result_list = []
@@ -220,19 +246,31 @@ class SimpleClientManager(ClientManager):
             gradients.append(g.gradient(y, x))
 
             weights.append(result_list)
-        #print(np.shape(weights))
+        print(np.shape(weights))
 
         # Clustering
         cluster = AgglomerativeClustering(n_clusters=None, distance_threshold=0, compute_distances=True).fit(gradients)
-        #cluster = AgglomerativeClustering(n_clusters=None, distance_threshold=0, compute_distances=True).fit(weights)
+        #cluster = AgglomerativeClustering(n_clusters=2, compute_distances=True).fit(weights)
         #cluster = KMeans(n_clusters=2, n_init='auto').fit(weights)
         labels = cluster.labels_
         print(labels)
+<<<<<<< ours
+        #print(cluster.n_leaves_)
+        #print(cluster.distances_)
+
+=======
         print(cluster.n_leaves_)
         print(cluster.distances_)
+>>>>>>> theirs
         plt.title('Hierarchical Clustering Dendrogram')
         # plot the top three levels of the dendrogram
         plot_dendrogram(cluster, truncate_mode='level', p=10)
-        plt.xlabel("Client Id")
+        labels = [item.get_text() for item in plt.gca().get_xticklabels()]
+        #print(labels)
+        new_labels = []
+        new_labels = [client_list[int(x)] for x in labels]
+
+        plt.gca().set_xticklabels(new_labels)
+
         plt.show()
         
