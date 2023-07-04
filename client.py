@@ -120,10 +120,14 @@ def data_load(client_id):
 
     # Create artificial imbalanced class counts
     # imbal_class_counts = [500, 5000] * 5
-    if(client_id < client_num/2):
-        imbal_class_counts = [5000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    if(client_id < 2):
+        imbal_class_counts = [3000, 3000, 0, 0, 0, 0, 0, 0, 0, 0]
+    elif(client_id < 4):
+        imbal_class_counts = [0, 0, 3000, 3000, 0, 0, 0, 0, 0, 0]
+    elif(client_id < 6):
+        imbal_class_counts = [0, 0, 0, 0, 3000, 3000, 0, 0, 0, 0]
     else:
-        imbal_class_counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 5000]
+        imbal_class_counts = [0, 0, 0, 0, 0, 0, 3000, 3000, 0, 0]
     print(imbal_class_counts)
 
     # Get class indices
@@ -163,6 +167,7 @@ class CifarClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
+        print(f'client evaluate acc: {accuracy}')
         return loss, len(x_test), {"accuracy": accuracy}
 
 # Start Flower client

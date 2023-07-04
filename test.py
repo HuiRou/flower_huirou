@@ -48,8 +48,8 @@ class SelectEnv(Env):
         
     def step(self, action):
         global models
-        print(action)
         actions = self.action_space[action]
+        print(actions)
         agg_models = [models[i] for i in range(len(actions)) if actions[i] == 1]
         parameters_aggregated = aggregate(agg_models)     
         global global_model   
@@ -207,6 +207,36 @@ def plot_dendrogram(model, **kwargs):
 
     # Plot the corresponding dendrogram
     dendrogram(linkage_matrix, **kwargs)
+
+def plot_acc_loss(loss, acc):
+    host = host_subplot(111)  # row=1 col=1 first pic
+    plt.subplots_adjust(right=0.8)  # ajust the right boundary of the plot window
+    par1 = host.twinx()   # 共享x軸
+
+    # set labels
+    host.set_xlabel("steps")
+    host.set_ylabel("test-loss")
+    par1.set_ylabel("test-accuracy")
+
+    # plot curves
+    p1, = host.plot(range(len(loss)), loss, label="loss")
+    p2, = par1.plot(range(len(acc)), acc, label="accuracy")
+
+    # set location of the legend,
+    # 1->rightup corner, 2->leftup corner, 3->leftdown corner
+    # 4->rightdown corner, 5->rightmid ...
+    host.legend(loc=5)
+
+    # set label color
+    host.axis["left"].label.set_color(p1.get_color())
+    par1.axis["right"].label.set_color(p2.get_color())
+
+    # set the range of x axis of host and y axis of par1
+    # host.set_xlim([-200, 5200])
+    # par1.set_ylim([-0.1, 1.1])
+
+    plt.draw()
+    plt.show()
 
 def data_load(client_id):
     

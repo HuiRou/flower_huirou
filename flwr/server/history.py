@@ -26,6 +26,8 @@ class History:
     def __init__(self) -> None:
         self.losses_distributed: List[Tuple[int, float]] = []
         self.losses_centralized: List[Tuple[int, float]] = []
+        self.acces_distributed: List[Tuple[int, float]] = []
+        self.acces_centralized: List[Tuple[int, float]] = []
         self.metrics_distributed: Dict[str, List[Tuple[int, Scalar]]] = {}
         self.metrics_centralized: Dict[str, List[Tuple[int, Scalar]]] = {}
 
@@ -36,6 +38,14 @@ class History:
     def add_loss_centralized(self, server_round: int, loss: float) -> None:
         """Add one loss entry (from centralized evaluation)."""
         self.losses_centralized.append((server_round, loss))
+
+    def add_acc_distributed(self, server_round: int, acc: float) -> None:
+        """Add one acc entry (from distributed evaluation)."""
+        self.acces_distributed.append((server_round, acc))
+
+    def add_acc_centralized(self, server_round: int, acc: float) -> None:
+        """Add one acc entry (from centralized evaluation)."""
+        self.acces_centralized.append((server_round, acc))
 
     def add_metrics_distributed(
         self, server_round: int, metrics: Dict[str, Scalar]

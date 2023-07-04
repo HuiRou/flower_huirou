@@ -66,7 +66,7 @@ class SelectEnv(Env):
         #self.shower_length = 60 
         return self.state
 
-    def build_model(states, actions):
+    def build_model(self, states, actions):
         model = Sequential()
         model.add(Flatten(input_shape=(1,states)))
         model.add(Dense(24, activation='relu'))
@@ -74,7 +74,7 @@ class SelectEnv(Env):
         model.add(Dense(actions, activation='linear'))
         return model
 
-    def build_agent(model, actions):
+    def build_agent(self, model, actions):
         policy = BoltzmannQPolicy()
         memory = SequentialMemory(limit=50000, window_length=1)
         dqn = DQNAgent(model=model, memory=memory, policy=policy, 

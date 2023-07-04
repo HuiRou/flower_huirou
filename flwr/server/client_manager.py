@@ -103,6 +103,7 @@ class ClientManager(ABC):
         num_clients: int,
         min_num_clients: Optional[int] = None,
         criterion: Optional[Criterion] = None,
+        selection: Optional[list] = None,
     ) -> List[ClientProxy]:
         """Sample a number of Flower ClientProxy instances."""
 
@@ -170,6 +171,7 @@ class SimpleClientManager(ClientManager):
         num_clients: int,
         min_num_clients: Optional[int] = None,
         criterion: Optional[Criterion] = None,
+        selection: Optional[list] = None,
     ) -> List[ClientProxy]:
         """Sample a number of Flower ClientProxy instances."""
         # Block until at least num_clients are connected.
@@ -192,15 +194,51 @@ class SimpleClientManager(ClientManager):
                 num_clients,
             )
             return []
+        
+        sampled_cids = random.sample(available_cids, num_clients)
+        #sampled_cids = available_cids
 
+        return [self.clients[cid] for cid in sampled_cids]
+
+    def sample_selection(
+        self,
+        num_clients: int,
+        min_num_clients: Optional[int] = None,
+        criterion: Optional[Criterion] = None,
+        selection: Optional[list] = None,
+    ) -> List[ClientProxy]:
+        """Sample a number of Flower ClientProxy instances."""
+        # Block until at least num_clients are connected.
+        if min_num_clients is None:
+            min_num_clients = num_clients
+        self.wait_for(min_num_clients)
+        # Sample clients which meet the criterion
+        available_cids = list(self.clients)
+        if criterion is not None:
+            available_cids = [
+                cid for cid in available_cids if criterion.select(self.clients[cid])
+            ]
+
+        # if num_clients > len(available_cids):
+        #     log(
+        #         INFO,
+        #         "Sampling failed: number of available clients"
+        #         " (%s) is less than number of requested clients (%s).",
+        #         len(available_cids),
+        #         num_clients,
+        #     )
+        #     return []
+        if(len(selection) != len(available_cids)):
+            log(INFO, "len(selection) != len(available_cids)")   
+        sampled_cids = [available_cids[i] for i in range(len(selection)) if selection[i] == 1]
         #sampled_cids = random.sample(available_cids, num_clients)
-        sampled_cids = available_cids
+        #sampled_cids = available_cids
 
         return [self.clients[cid] for cid in sampled_cids]
 
     def build_distance_matrix(self):
         log(INFO, "build_distance_matrix")   
-        print(self.clients)     
+        # print(self.clients)     
         print(self.clients.keys())
         ins = GetParametersIns(config={})
         weight = []
@@ -217,6 +255,7 @@ class SimpleClientManager(ClientManager):
             weights.append(result_list)
         distance_matrix = pairwise_distances(weights, metric='euclidean')
         print(distance_matrix)
+        return distance_matrix
 
 
     def clustering(self):
@@ -254,14 +293,13 @@ class SimpleClientManager(ClientManager):
         #cluster = KMeans(n_clusters=2, n_init='auto').fit(weights)
         labels = cluster.labels_
         print(labels)
-<<<<<<< ours
+
         #print(cluster.n_leaves_)
         #print(cluster.distances_)
 
-=======
         print(cluster.n_leaves_)
         print(cluster.distances_)
->>>>>>> theirs
+
         plt.title('Hierarchical Clustering Dendrogram')
         # plot the top three levels of the dendrogram
         plot_dendrogram(cluster, truncate_mode='level', p=10)

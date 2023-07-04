@@ -172,7 +172,7 @@ class FedAvg(Strategy):
         return loss, metrics
 
     def configure_fit(
-        self, server_round: int, parameters: Parameters, client_manager: ClientManager
+        self, server_round: int, parameters: Parameters, client_manager: ClientManager , selection: list
     ) -> List[Tuple[ClientProxy, FitIns]]:
         """Configure the next round of training."""
         config = {}
@@ -185,8 +185,8 @@ class FedAvg(Strategy):
         sample_size, min_num_clients = self.num_fit_clients(
             client_manager.num_available()
         )
-        clients = client_manager.sample(
-            num_clients=sample_size, min_num_clients=min_num_clients
+        clients = client_manager.sample_selection(
+            num_clients=sample_size, min_num_clients=min_num_clients, selection=selection
         )
         
         # Return client/config pairs
