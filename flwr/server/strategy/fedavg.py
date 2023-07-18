@@ -63,7 +63,7 @@ class FedAvg(Strategy):
         fraction_fit: float = 1.0,
         fraction_evaluate: float = 1.0,
         min_fit_clients: int = 2,
-        min_evaluate_clients: int = 2,
+        min_evaluate_clients: int = 1,
         min_available_clients: int = 2,
         evaluate_fn: Optional[
             Callable[
@@ -212,7 +212,7 @@ class FedAvg(Strategy):
             client_manager.num_available()
         )
         clients = client_manager.sample(
-            num_clients=sample_size, min_num_clients=min_num_clients
+            num_clients=1, min_num_clients=min_num_clients
         )
 
         # Return client/config pairs

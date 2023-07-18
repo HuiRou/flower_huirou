@@ -1,7 +1,7 @@
 #!/bin/bash
 
-client_num=3
-comm_round=5
+client_num=8
+comm_round=100
 
 
 echo "Starting server"
@@ -12,6 +12,7 @@ for i in $(seq 0 `expr $client_num - 1`); do
     echo "Starting client $i"
     python client.py $client_num $i&
 done
+
 
 # This will allow you to use CTRL+C to stop all background processes
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM

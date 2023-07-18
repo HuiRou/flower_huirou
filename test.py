@@ -299,6 +299,7 @@ def aggregate(results) -> NDArrays:
     weighted_weights = [
         [layer for layer in weights] for weights in results
     ]
+    
     #print(len(weighted_weights))
     weights_prime: NDArrays = [
         reduce(np.add, layer_updates) / len(results)

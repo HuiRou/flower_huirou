@@ -254,7 +254,7 @@ class SimpleClientManager(ClientManager):
                 result_list.extend(result)
             weights.append(result_list)
         distance_matrix = pairwise_distances(weights, metric='euclidean')
-        print(distance_matrix)
+        #print(distance_matrix)
         return distance_matrix
 
 

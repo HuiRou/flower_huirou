@@ -48,6 +48,9 @@ from rl.agents import DQNAgent
 from rl.policy import BoltzmannQPolicy
 from rl.memory import SequentialMemory
 #from flwr.server.env import SelectEnv
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import host_subplot
+from matplotlib.pyplot import MultipleLocator
 
 FitResultsAndFailures = Tuple[
     List[Tuple[ClientProxy, FitRes]],
@@ -72,19 +75,17 @@ class SelectEnv:
     def __init__(self):
         # Actions we can take, down, stay, up
         self.action_space = []
-        # Temperature array
-        #self.observation_space = Box(low=np.array([0]), high=np.array([100]))
-        # Set start temp
         self.action = []
         self.state = []
-        # Set shower length
-        self.acc = 15 #use to control done's condition
+        self.acc = 30 #use to control done's condition
         self.fit = None
         self.evaluate = None
         self.server = None
+        self.count = 0
         
     def step(self, action):        
         self.action = self.action_space[action]
+        # self.action = self.action_space[-1]
         print(f'\naction: {action, self.action}')
         #agg_models = [models[i] for i in range(len(actions)) if actions[i] == 1]
         #parameters_aggregated = aggregate(agg_models)     
@@ -99,8 +100,11 @@ class SelectEnv:
         global g_timeout
         global g_current_round
         global g_num_round
-
-        log(INFO, "training")
+        
+        self.count += 1
+        log(INFO, f'training (COUNT: {self.count})')
+        g_current_round += 1
+       
         res_fit = self.server.fit_round(server_round=g_current_round, timeout=g_timeout)
         if res_fit:
             parameters_prime, _, _ = res_fit  # fit_metrics_aggregated
@@ -111,42 +115,56 @@ class SelectEnv:
         log(INFO, "Evaluate 2")
         res_fed = self.server.evaluate_round(server_round=g_current_round, timeout=g_timeout)
         if res_fed:
-            print(f'acc: {res_fed[-1][-2][-1][-1].metrics["accuracy"]}')
+            print(f'ACC: {res_fed[-1][-2][-1][-1].metrics["accuracy"]}')
             loss_fed, evaluate_metrics_fed, _ = res_fed
             acc = res_fed[-1][-2][-1][-1].metrics['accuracy']
-            if loss_fed:
-                g_history.add_loss_distributed(
-                    server_round=g_current_round, loss=loss_fed
-                )
-                g_history.add_acc_distributed(
-                    server_round=g_current_round, acc=acc
-                )
-                g_history.add_metrics_distributed(
-                    server_round=g_current_round, metrics=evaluate_metrics_fed
-                )
-
-        g_current_round += 1
+            # if loss_fed:
+            #     g_history.add_loss_distributed(
+            #         server_round=g_current_round, loss=loss_fed
+            #     )
+            #     g_history.add_acc_distributed(
+            #         server_round=g_current_round, acc=acc
+            #     )
+            #     g_history.add_metrics_distributed(
+            #         server_round=g_current_round, metrics=evaluate_metrics_fed
+            #     )
 
         # Calculate reward
         #if accuracy >= self.acc and self.state <=39: 
         #    reward =1 
         #else: 
         #    reward = -1 
-        print(f'loss: {loss_fed}')
+        # print(f'loss: {loss_fed}')
         reward = acc * 100
 
         # Check if is done
-        if reward >= self.acc or g_current_round >= g_num_round: 
-            done = True
+        if reward >= self.acc: 
+            print(f'ROUND: {g_current_round}, REWARD: {reward}')
+            g_history.add_loss_distributed(
+                server_round=g_current_round, loss=loss_fed
+            )
+            g_history.add_acc_distributed(
+                server_round=g_current_round, acc=acc
+            )
+            # g_history.add_metrics_distributed(
+            #     server_round=g_current_round, metrics=evaluate_metrics_fed
+            # )
+            if g_current_round >= g_num_round:
+                done = True
+            else:
+                done = False
+
         else:
+            g_current_round -= 1
             done = False
         
         # Apply temperature noise
-        #self.state += random.randint(-1,1)
+        # self.state += random.randint(-1,1)
         # Set placeholder for info
         info = {}
 
         states = self.state
+        # states = self.server._client_manager.build_distance_matrix().flatten()
         # Return step information
         return states, reward, done, info
 
@@ -229,8 +247,9 @@ class Server:
             )
             #g_history.add_loss_centralized(server_round=0, loss=res[0])
             #g_history.add_metrics_centralized(server_round=0, metrics=res[1])
-
         client_num = len(self._client_manager)
+        while len(self._client_manager) < 8:
+            client_num = len(self._client_manager)
         print(client_num)
 
         fm = '{:0' + str(client_num) + 'b}'
@@ -249,12 +268,12 @@ class Server:
         start_time = timeit.default_timer()
         log(INFO, "FL starting round")
 
-        for current_round in range(1, 2): #1, num_rounds + 1
+        for current_round in range(1, 3): #1, num_rounds + 1
             
             log(INFO, f'current_round: {current_round}')
             # Train model and replace previous global model
 
-            g_current_round = current_round
+            #g_current_round = current_round
 
             log(INFO, "training")
             res_fit = self.fit_round(server_round=current_round, timeout=timeout)
@@ -318,6 +337,7 @@ class Server:
         dqn.fit(self.env, nb_steps=num_rounds, visualize=False, verbose=1)
         print("SCORES")
         scores = dqn.test(self.env, nb_episodes=3, visualize=False)
+        print(scores.history['episode_reward'])
         print(np.mean(scores.history['episode_reward']))
 
 
@@ -328,6 +348,10 @@ class Server:
         end_time = timeit.default_timer()
         elapsed = end_time - start_time
         log(INFO, "FL finished in %s", elapsed)
+
+        acc = g_history.acces_distributed
+        plot_acc_loss([a for _, a in acc])
+
         return g_history
 
     def evaluate_round(
@@ -626,4 +650,22 @@ def _handle_finished_future_after_evaluate(
     # Not successful, client returned a result where the status code is not OK
     failures.append(result)
 
-
+def plot_acc_loss(acc):
+    plt.plot(acc)
+    plt.title('Model accuracy')
+    plt.xlabel('Round')
+    plt.legend(['Train_acc'])
+    x_major_locator=MultipleLocator(10)
+    y_major_locator=MultipleLocator(0.1)
+    #把y轴的刻度间隔设置为10，并存在变量里
+    ax=plt.gca()
+    #ax为两条坐标轴的实例
+    ax.xaxis.set_major_locator(x_major_locator)
+    #把x轴的主刻度设置为1的倍数
+    ax.yaxis.set_major_locator(y_major_locator)
+    #把y轴的主刻度设置为10的倍数
+    #plt.xlim(-0.5,11)
+    #把x轴的刻度范围设置为-0.5到11，因为0.5不满一个刻度间隔，所以数字不会显示出来，但是能看到一点空白
+    plt.ylim(0,1)
+    #把y轴的刻度范围设置为-5到110，同理，-5不会标出来，但是能看到一点空白
+    plt.show()

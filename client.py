@@ -4,6 +4,7 @@ import numpy as np
 import flwr as fl
 import tensorflow as tf
 from tensorflow.keras import Sequential, layers
+import copy
 #tf.keras.backend.set_image_data_format('channels_last')
 # Make TensorFlow log less verbose
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -109,14 +110,16 @@ def isNum(s):
         return False
 
 def data_load(client_id):
-    
+
+    user_test_data = True
+
     # Load CIFAR10
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data() #10 class 5000 instance each
 
     # Get all training targets and count the number of class instances
     classes, class_counts = np.unique(y_train , return_counts=True)
     nb_classes = len(classes)
-    #print(class_counts)
+    #print(class_counts
 
     # Create artificial imbalanced class counts
     # imbal_class_counts = [500, 5000] * 5
@@ -135,12 +138,21 @@ def data_load(client_id):
     #print(class_indices)
 
     # Get imbalanced number of instances
-    imbal_class_indices = [class_idx[:class_count] for class_idx, class_count in   zip(class_indices, imbal_class_counts)]
+    imbal_class_indices = [class_idx[:class_count] for class_idx, class_count in zip(class_indices, imbal_class_counts)]
     imbal_class_indices = np.hstack(imbal_class_indices)
 
     # Set target and data to dataset
     y_train = y_train[imbal_class_indices]
     x_train = x_train[imbal_class_indices]
+
+    # test data
+    if user_test_data == True:
+        class_indices = [np.where(y_test == i)[0] for i in range(nb_classes)]
+        test_imbal_class_counts = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 0, 0]
+        test_imbal_class_indices = [class_idx[:class_count] for class_idx, class_count in zip(class_indices, test_imbal_class_counts)]
+        test_imbal_class_indices = np.hstack(test_imbal_class_indices)
+        y_test = y_test[test_imbal_class_indices]
+        x_test = x_test[test_imbal_class_indices]
 
     assert len(x_train) == len(y_train)
     return (x_train, y_train), (x_test, y_test)
@@ -159,15 +171,20 @@ class CifarClient(fl.client.NumPyClient):
         return result
 
     def fit(self, parameters, config):
+        model_bf = model
         model.set_weights(parameters)
         model.fit(x_train, y_train, epochs=2, batch_size=32)
         result = model.get_weights()
+        model.set_weights(model_bf.get_weights())
         return result, len(x_train), {}
 
     def evaluate(self, parameters, config):
+        model_bf = model
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
-        print(f'client evaluate acc: {accuracy}')
+        # print(f'client evaluate acc: {accuracy}')
+        model.set_weights(model_bf.get_weights())
+
         return loss, len(x_test), {"accuracy": accuracy}
 
 # Start Flower client
