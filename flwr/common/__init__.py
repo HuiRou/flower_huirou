@@ -30,6 +30,8 @@ from .typing import FitIns as FitIns
 from .typing import FitRes as FitRes
 from .typing import GetParametersIns as GetParametersIns
 from .typing import GetParametersRes as GetParametersRes
+from .typing import GetParametersIns as ResetIns
+from .typing import GetParametersRes as ResetRes
 from .typing import GetPropertiesIns as GetPropertiesIns
 from .typing import GetPropertiesRes as GetPropertiesRes
 from .typing import Metrics as Metrics
@@ -55,6 +57,8 @@ __all__ = [
     "FitRes",
     "GetParametersIns",
     "GetParametersRes",
+    "ResetIns",
+    "ResetRes",
     "GetPropertiesIns",
     "GetPropertiesRes",
     "GRPC_MAX_MESSAGE_LENGTH",

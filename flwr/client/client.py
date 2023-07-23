@@ -26,6 +26,8 @@ from flwr.common import (
     GetParametersRes,
     GetPropertiesIns,
     GetPropertiesRes,
+    ResetIns,
+    ResetRes,
 )
 
 
@@ -48,6 +50,20 @@ class Client(ABC):
         """
 
     def get_parameters(self, ins: GetParametersIns) -> GetParametersRes:
+        """Return the current local model parameters.
+
+        Parameters
+        ----------
+        ins : GetParametersIns
+            The get parameters instructions received from the server containing
+            a dictionary of configuration values.
+
+        Returns
+        -------
+        GetParametersRes
+            The current local model parameters.
+        """
+    def reset(self, ins: ResetIns) -> ResetRes:
         """Return the current local model parameters.
 
         Parameters
@@ -107,6 +123,9 @@ def has_get_parameters(client: Client) -> bool:
     """Check if Client implements get_parameters."""
     return type(client).get_parameters != Client.get_parameters
 
+def has_reset(client: Client) -> bool:
+    """Check if Client implements get_parameters."""
+    return type(client).get_parameters != Client.get_parameters
 
 def has_fit(client: Client) -> bool:
     """Check if Client implements fit."""

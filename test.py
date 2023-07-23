@@ -115,29 +115,29 @@ def model4cifar10():
     _________________________________________________________________
     dropout (Dropout)            (None, 16, 16, 32)        0         
     _________________________________________________________________
-    conv2d_2 (Conv2D)            (None, 16, 16, 64)        18496     
-    _________________________________________________________________
-    batch_normalization_2 (Batch (None, 16, 16, 64)        256       
-    _________________________________________________________________
-    conv2d_3 (Conv2D)            (None, 16, 16, 64)        36928     
-    _________________________________________________________________
-    batch_normalization_3 (Batch (None, 16, 16, 64)        256       
-    _________________________________________________________________
-    max_pooling2d_1 (MaxPooling2 (None, 8, 8, 64)          0         
-    _________________________________________________________________
-    dropout_1 (Dropout)          (None, 8, 8, 64)          0         
-    _________________________________________________________________
-    conv2d_4 (Conv2D)            (None, 8, 8, 128)         73856     
-    _________________________________________________________________
-    batch_normalization_4 (Batch (None, 8, 8, 128)         512       
-    _________________________________________________________________
-    conv2d_5 (Conv2D)            (None, 8, 8, 128)         147584    
-    _________________________________________________________________
-    batch_normalization_5 (Batch (None, 8, 8, 128)         512       
-    _________________________________________________________________
-    max_pooling2d_2 (MaxPooling2 (None, 4, 4, 128)         0         
-    _________________________________________________________________
-    dropout_2 (Dropout)          (None, 4, 4, 128)         0         
+    # conv2d_2 (Conv2D)            (None, 16, 16, 64)        18496     
+    # _________________________________________________________________
+    # batch_normalization_2 (Batch (None, 16, 16, 64)        256       
+    # _________________________________________________________________
+    # conv2d_3 (Conv2D)            (None, 16, 16, 64)        36928     
+    # _________________________________________________________________
+    # batch_normalization_3 (Batch (None, 16, 16, 64)        256       
+    # _________________________________________________________________
+    # max_pooling2d_1 (MaxPooling2 (None, 8, 8, 64)          0         
+    # _________________________________________________________________
+    # dropout_1 (Dropout)          (None, 8, 8, 64)          0         
+    # _________________________________________________________________
+    # conv2d_4 (Conv2D)            (None, 8, 8, 128)         73856     
+    # _________________________________________________________________
+    # batch_normalization_4 (Batch (None, 8, 8, 128)         512       
+    # _________________________________________________________________
+    # conv2d_5 (Conv2D)            (None, 8, 8, 128)         147584    
+    # _________________________________________________________________
+    # batch_normalization_5 (Batch (None, 8, 8, 128)         512       
+    # _________________________________________________________________
+    # max_pooling2d_2 (MaxPooling2 (None, 4, 4, 128)         0         
+    # _________________________________________________________________
+    # dropout_2 (Dropout)          (None, 4, 4, 128)         0         
     _________________________________________________________________
     flatten (Flatten)            (None, 2048)              0         
     _________________________________________________________________
@@ -149,33 +149,33 @@ def model4cifar10():
     _________________________________________________________________
     dense_1 (Dense)              (None, 10)                1290      
     =================================================================
-    Total params: 552,874
+    Total params: 552,874 -> 815.146(no padding)
     Trainable params: 551,722
     Non-trainable params: 1,152 
     '''
     num_classes = 10
     model = Sequential()
 
-    model.add(layers.Conv2D(32, (3,3), padding='same', activation='relu', input_shape=(32,32,3)))
+    model.add(layers.Conv2D(32, (3,3), activation='relu', input_shape=(32,32,3))) # padding='same', 
     model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(32, (3,3), padding='same', activation='relu'))
+    model.add(layers.Conv2D(32, (3,3), activation='relu'))
     model.add(layers.BatchNormalization())
     model.add(layers.MaxPooling2D(pool_size=(2,2)))
     model.add(layers.Dropout(0.3))
 
-    model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.MaxPooling2D(pool_size=(2,2)))
-    model.add(layers.Dropout(0.5))
+    # model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.MaxPooling2D(pool_size=(2,2)))
+    # model.add(layers.Dropout(0.5))
 
-    model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.MaxPooling2D(pool_size=(2,2)))
-    model.add(layers.Dropout(0.5))
+    # model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.MaxPooling2D(pool_size=(2,2)))
+    # model.add(layers.Dropout(0.5))
 
     model.add(layers.Flatten())
     model.add(layers.Dense(128, activation='relu'))
@@ -184,7 +184,7 @@ def model4cifar10():
     model.add(layers.Dense(num_classes, activation='softmax'))    # num_classes = 10
     model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])
     # Checking the model summary
-    #model.summary()
+    model.summary()
     return model
 
 def plot_dendrogram(model, **kwargs):
@@ -299,7 +299,7 @@ def aggregate(results) -> NDArrays:
     weighted_weights = [
         [layer for layer in weights] for weights in results
     ]
-    
+
     #print(len(weighted_weights))
     weights_prime: NDArrays = [
         reduce(np.add, layer_updates) / len(results)
@@ -374,7 +374,7 @@ if __name__ == '__main__':
 
     env = SelectEnv()
     env.state = build_distance_matrix(models)[0]
-    states = len(env.state)
+    states = client_num
 
     '''episodes = 10
     for episode in range(1, episodes+1):
@@ -394,9 +394,9 @@ if __name__ == '__main__':
 
     dqn = build_agent(fl_model, actions)
     dqn.compile(Adam(lr=1e-3), metrics=['mae'])
-    dqn.fit(env, nb_steps=100, visualize=False, verbose=1)
+    dqn.fit(env, nb_steps=10, visualize=False, verbose=1)
     print("SCORES")
-    scores = dqn.test(env, nb_episodes=10, visualize=False)
+    scores = dqn.test(env, nb_episodes=3, visualize=False)
     print(np.mean(scores.history['episode_reward']))
 
 

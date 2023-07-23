@@ -45,6 +45,7 @@ class Code(Enum):
     GET_PARAMETERS_NOT_IMPLEMENTED = 2
     FIT_NOT_IMPLEMENTED = 3
     EVALUATE_NOT_IMPLEMENTED = 4
+    RESET_NOT_IMPLEMENTED = 5
 
 
 @dataclass
@@ -77,6 +78,19 @@ class GetParametersRes:
     status: Status
     parameters: Parameters
 
+@dataclass
+class ResetIns:
+    """Parameters request for a client."""
+
+    config: Config
+
+
+@dataclass
+class ResetRes:
+    """Response when asked to return parameters."""
+
+    status: Status
+    parameters: Parameters
 
 @dataclass
 class FitIns:

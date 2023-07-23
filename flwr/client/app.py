@@ -33,6 +33,8 @@ from flwr.common.typing import (
     FitRes,
     GetParametersIns,
     GetParametersRes,
+    ResetIns,
+    ResetRes,
     GetPropertiesIns,
     GetPropertiesRes,
     NDArrays,
@@ -46,6 +48,7 @@ from .numpy_client import NumPyClient
 from .numpy_client import has_evaluate as numpyclient_has_evaluate
 from .numpy_client import has_fit as numpyclient_has_fit
 from .numpy_client import has_get_parameters as numpyclient_has_get_parameters
+# from .numpy_client import has_reset as numpyclient_has_reset
 from .numpy_client import has_get_properties as numpyclient_has_get_properties
 
 EXCEPTION_MESSAGE_WRONG_RETURN_TYPE_FIT = """
@@ -238,6 +241,14 @@ def _get_parameters(self: Client, ins: GetParametersIns) -> GetParametersRes:
     parameters = self.numpy_client.get_parameters(config=ins.config)  # type: ignore
     parameters_proto = ndarrays_to_parameters(parameters)
     return GetParametersRes(
+        status=Status(code=Code.OK, message="Success"), parameters=parameters_proto
+    )
+
+def _reset(self: Client, ins: ResetIns) -> ResetRes:
+    """Return the current local model parameters."""
+    parameters = self.numpy_client.reset(config=ins.config)  # type: ignore
+    parameters_proto = ndarrays_to_parameters(parameters)
+    return ResetRes(
         status=Status(code=Code.OK, message="Success"), parameters=parameters_proto
     )
 

@@ -49,6 +49,7 @@ class ServerConfig:
 
     num_rounds: int = 1
     round_timeout: Optional[float] = None
+    mode: str = None
 
 
 def start_server(  # pylint: disable=too-many-arguments
@@ -188,14 +189,19 @@ def _fl(
     config: ServerConfig,
 ) -> History:
     # Fit model
-    hist = server.fit(num_rounds=config.num_rounds, timeout=config.round_timeout)
-    log(INFO, "app_fit: losses_distributed %s", str(hist.losses_distributed))
+    hist = server.fit(mode=config.mode, num_rounds=config.num_rounds, timeout=config.round_timeout)
+    #log(INFO, "app_fit: losses_distributed %s", str(hist.losses_distributed))
     log(INFO, "app_fit: acces_distributed %s", str(hist.acces_distributed))
-    log(INFO, "app_fit: metrics_distributed %s", str(hist.metrics_distributed))
+    s = '\n'
+    #ac = s.join(map(str, hist.train_actions_distributed))
+    log(INFO, "app_fit: train_actions_distributed\n %s", str(s.join(map(str, hist.train_actions_distributed))))
+    log(INFO, "app_fit: test_actions_distributed\n %s", str(s.join(map(str, hist.test_actions_distributed))))
+
+    #log(INFO, "app_fit: metrics_distributed %s", str(hist.metrics_distributed))
     
-    log(INFO, "app_fit: losses_centralized %s", str(hist.losses_centralized))
-    log(INFO, "app_fit: acces_centralized %s", str(hist.acces_centralized))
-    log(INFO, "app_fit: metrics_centralized %s", str(hist.metrics_centralized))
+    #log(INFO, "app_fit: losses_centralized %s", str(hist.losses_centralized))
+    #log(INFO, "app_fit: acces_centralized %s", str(hist.acces_centralized))
+    #log(INFO, "app_fit: metrics_centralized %s", str(hist.metrics_centralized))
 
     # Graceful shutdown
     server.disconnect_all_clients(timeout=config.round_timeout)

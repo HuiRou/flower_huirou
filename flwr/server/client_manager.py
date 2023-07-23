@@ -229,7 +229,7 @@ class SimpleClientManager(ClientManager):
         #     )
         #     return []
         if(len(selection) != len(available_cids)):
-            log(INFO, "len(selection) != len(available_cids)")   
+             log(INFO, f"len(selection) != len(available_cids), {len(selection)} vs {len(available_cids)}")   
         sampled_cids = [available_cids[i] for i in range(len(selection)) if selection[i] == 1]
         #sampled_cids = random.sample(available_cids, num_clients)
         #sampled_cids = available_cids

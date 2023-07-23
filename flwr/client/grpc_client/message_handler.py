@@ -68,6 +68,8 @@ def handle(
         return _get_properties(client, server_msg.get_properties_ins), 0, True
     if field == "get_parameters_ins":
         return _get_parameters(client, server_msg.get_parameters_ins), 0, True
+    if field == "get_reset":
+        return _reset(client, server_msg.reset_ins), 0, True
     if field == "fit_ins":
         return _fit(client, server_msg.fit_ins), 0, True
     if field == "evaluate_ins":
@@ -138,6 +140,29 @@ def _get_parameters(
     get_parameters_res_proto = serde.get_parameters_res_to_proto(get_parameters_res)
     return ClientMessage(get_parameters_res=get_parameters_res_proto)
 
+def _reset(
+    client: Client, reset_msg # : ServerMessage.ResetIns
+) -> ClientMessage:
+    # Check if client overrides get_parameters
+    if not has_reset(client=client):
+        # If client does not override get_parameters, don't call it
+        reset_res = typing.resetRes(
+            status=typing.Status(
+                code=typing.Code.RESET_NOT_IMPLEMENTED,
+                message="Client does not implement `reset`",
+            ),
+            parameters=Parameters(tensor_type="", tensors=[]),
+        )
+        reset_res_proto = serde.get_parameters_res_to_proto(reset_res)
+        return ClientMessage(reset_res=reset_proto)
+
+    # Deserialize get_properties instruction
+    get_parameters_ins = serde.get_parameters_ins_from_proto(get_parameters_msg)
+    # Request parameters
+    get_parameters_res = client.get_parameters(get_parameters_ins)
+    # Serialize response
+    get_parameters_res_proto = serde.get_parameters_res_to_proto(get_parameters_res)
+    return ClientMessage(get_parameters_res=get_parameters_res_proto)
 
 def _fit(client: Client, fit_msg: ServerMessage.FitIns) -> ClientMessage:
     # Check if client overrides fit

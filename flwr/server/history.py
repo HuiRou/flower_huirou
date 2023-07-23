@@ -28,6 +28,10 @@ class History:
         self.losses_centralized: List[Tuple[int, float]] = []
         self.acces_distributed: List[Tuple[int, float]] = []
         self.acces_centralized: List[Tuple[int, float]] = []
+        
+        self.train_actions_distributed: List[Tuple[int, list]] = []
+        self.test_actions_distributed: List[Tuple[int, list]] = []
+
         self.metrics_distributed: Dict[str, List[Tuple[int, Scalar]]] = {}
         self.metrics_centralized: Dict[str, List[Tuple[int, Scalar]]] = {}
 
@@ -46,6 +50,14 @@ class History:
     def add_acc_centralized(self, server_round: int, acc: float) -> None:
         """Add one acc entry (from centralized evaluation)."""
         self.acces_centralized.append((server_round, acc))
+
+    def add_train_action_distributed(self, server_round: int, action: list) -> None:
+        """Add one action entry (from distributed evaluation)."""
+        self.train_actions_distributed.append((server_round, action))
+
+    def add_test_action_distributed(self, server_round: int, action: list) -> None:
+        """Add one action entry (from distributed evaluation)."""
+        self.test_actions_distributed.append((server_round, action))
 
     def add_metrics_distributed(
         self, server_round: int, metrics: Dict[str, Scalar]

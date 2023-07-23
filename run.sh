@@ -1,16 +1,18 @@
 #!/bin/bash
 
 client_num=8
-comm_round=100
+comm_round=25
+mode=train
+#mode=test
 
 
 echo "Starting server"
-python server.py $comm_round&
+python server.py $mode $comm_round&
 sleep 3  # Sleep for 3s to give the server enough time to start
 
 for i in $(seq 0 `expr $client_num - 1`); do
     echo "Starting client $i"
-    python client.py $client_num $i&
+    python client.py $mode $client_num $i&
 done
 
 

@@ -17,6 +17,7 @@
 
 import concurrent.futures
 import timeit
+import datetime
 from logging import DEBUG, INFO
 from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
@@ -35,6 +36,7 @@ from flwr.common import (
 )
 from flwr.common.logger import log
 from flwr.common.typing import GetParametersIns
+from flwr.common.typing import ResetIns
 from flwr.server.client_manager import ClientManager
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.history import History
@@ -45,7 +47,14 @@ from tensorflow.keras.layers import Dense, Flatten
 from tensorflow.keras.optimizers import Adam
 #from actor_critic import Actor, Critic
 from rl.agents import DQNAgent
-from rl.policy import BoltzmannQPolicy
+from rl.policy import (
+    BoltzmannQPolicy,
+    LinearAnnealedPolicy,
+    SoftmaxPolicy,
+    EpsGreedyQPolicy,
+    GreedyQPolicy,
+    MaxBoltzmannQPolicy,
+)
 from rl.memory import SequentialMemory
 #from flwr.server.env import SelectEnv
 import matplotlib.pyplot as plt
@@ -70,23 +79,27 @@ g_timeout = 0
 g_current_round = 0
 g_num_round = 0
 g_history = None
+g_mode = None
 
 class SelectEnv:
     def __init__(self):
         # Actions we can take, down, stay, up
-        self.action_space = []
-        self.action = []
-        self.state = []
-        self.acc = 30 #use to control done's condition
-        self.fit = None
-        self.evaluate = None
+        self.action_space = None
+        self.action = None
+        self.init_state = None
+        self.state = None
+        self.matrix = None
         self.server = None
         self.count = 0
+        self.init_acc = 0
+        self.acc = 0 # use to control done's condition
         
     def step(self, action):        
         self.action = self.action_space[action]
         # self.action = self.action_space[-1]
         print(f'\naction: {action, self.action}')
+
+        #FEDAVG
         #agg_models = [models[i] for i in range(len(actions)) if actions[i] == 1]
         #parameters_aggregated = aggregate(agg_models)     
         #global global_model   
@@ -100,10 +113,12 @@ class SelectEnv:
         global g_timeout
         global g_current_round
         global g_num_round
+        global g_mode
         
-        self.count += 1
-        log(INFO, f'training (COUNT: {self.count})')
         g_current_round += 1
+        self.count += 1
+        log(INFO, f'training (ROUND: {g_current_round}, COUNT: {self.count})')
+       
        
         res_fit = self.server.fit_round(server_round=g_current_round, timeout=g_timeout)
         if res_fit:
@@ -118,16 +133,18 @@ class SelectEnv:
             print(f'ACC: {res_fed[-1][-2][-1][-1].metrics["accuracy"]}')
             loss_fed, evaluate_metrics_fed, _ = res_fed
             acc = res_fed[-1][-2][-1][-1].metrics['accuracy']
-            # if loss_fed:
-            #     g_history.add_loss_distributed(
-            #         server_round=g_current_round, loss=loss_fed
-            #     )
-            #     g_history.add_acc_distributed(
-            #         server_round=g_current_round, acc=acc
-            #     )
-            #     g_history.add_metrics_distributed(
-            #         server_round=g_current_round, metrics=evaluate_metrics_fed
-            #     )
+            
+            g_history.add_acc_distributed(
+                server_round=g_current_round, acc=acc
+            )
+            if g_mode == 'train':
+                g_history.add_train_action_distributed(
+                    server_round=g_current_round, action=self.action
+                )
+            if g_mode == 'test':
+                g_history.add_test_action_distributed(
+                    server_round=g_current_round, action=self.action
+                )
 
         # Calculate reward
         #if accuracy >= self.acc and self.state <=39: 
@@ -135,27 +152,47 @@ class SelectEnv:
         #else: 
         #    reward = -1 
         # print(f'loss: {loss_fed}')
-        reward = acc * 100
+                
+                ##########       ####          
+                ###########      ####
+                ####    ####     ####
+                ####    ####     ####
+    ########    ###########      ####            ########
+    ########    ##########       ####            ########
+                ####    ####     ####
+                ####    ####     ####
+                ####    ####     ############
+                ####    ####     ############
 
+        reward = (acc-self.acc)*100
+
+        states = []
+        
         # Check if is done
-        if reward >= self.acc: 
-            print(f'ROUND: {g_current_round}, REWARD: {reward}')
-            g_history.add_loss_distributed(
-                server_round=g_current_round, loss=loss_fed
-            )
-            g_history.add_acc_distributed(
-                server_round=g_current_round, acc=acc
-            )
-            # g_history.add_metrics_distributed(
-            #     server_round=g_current_round, metrics=evaluate_metrics_fed
-            # )
-            if g_current_round >= g_num_round:
-                done = True
-            else:
-                done = False
-
+        if reward > 0.5: # or self.count >= 10
+            print(f'ROUND: {g_current_round}, REWARD: {reward}')            
+           
+            # g_current_round += 1
+            self.acc = acc
+            # self.count = 0
+            # for m in self.matrix:
+            #     s = [m[i] for i in range(len(self.matrix)) if self.action[i] == 1]
+            #     #print(s, np.sum(s))
+            #     states.append(np.mean(s))
+            # print(f'NEXT_STATE = {states}')
+            done = True
+        # elif self.count >= 3:
+        #     print(f'ROUND: {g_current_round}, REWARD: {reward}')
+        #     g_history.add_acc_distributed(
+        #         server_round=g_current_round, acc=acc
+        #     )
+        #     g_current_round += 1
+        #     self.count = 0
+        #     done = True
         else:
-            g_current_round -= 1
+            #self.count -= 1
+            #g_current_round -= 1
+            #states = self.state
             done = False
         
         # Apply temperature noise
@@ -163,7 +200,11 @@ class SelectEnv:
         # Set placeholder for info
         info = {}
 
-        states = self.state
+        for m in self.matrix:
+            s = [m[i] for i in range(len(self.matrix)) if self.action[i] == 1]
+            #print(s, np.sum(s))
+            states.append(np.mean(s))
+        print(f'NEXT_STATE = {states}')
         # states = self.server._client_manager.build_distance_matrix().flatten()
         # Return step information
         return states, reward, done, info
@@ -176,7 +217,12 @@ class SelectEnv:
         # Reset shower temperature
         #self.state = 38 + random.randint(-3,3)
         # Reset shower time
-        #self.shower_length = 60 
+        #self.shower_length = 60
+        global g_timeout
+        #self.server.reset(timeout=g_timeout)
+        #print(f'now acc: {self.acc} / init_acc: {self.init_acc}')
+        #self.acc = self.init_acc
+        self.state = self.init_state
         return self.state
 
     def build_model(self, states, actions):
@@ -189,6 +235,12 @@ class SelectEnv:
 
     def build_agent(self, model, actions):
         policy = BoltzmannQPolicy()
+        # policy = LinearAnnealedPolicy()
+        # policy = SoftmaxPolicy()
+        # policy = EpsGreedyQPolicy()
+        # policy = GreedyQPolicy()
+        # policy = MaxBoltzmannQPolicy()
+
         memory = SequentialMemory(limit=50000, window_length=1)
         dqn = DQNAgent(model=model, memory=memory, policy=policy, 
                     nb_actions=actions, nb_steps_warmup=10, target_model_update=1e-2)
@@ -221,7 +273,7 @@ class Server:
         return self._client_manager
 
     # pylint: disable=too-many-locals
-    def fit(self, num_rounds: int, timeout: Optional[float]) -> History:
+    def fit(self, mode: str, num_rounds: int, timeout: Optional[float]) -> History:
         """Run federated averaging for a number of rounds."""
         global g_history
         g_history = History()
@@ -229,9 +281,11 @@ class Server:
         global g_timeout
         global g_current_round
         global g_num_round
+        global g_mode 
 
         g_timeout = timeout
         g_num_round = num_rounds
+        g_mode = mode
 
         # Initialize parameters
         log(INFO, "Initializing global parameters")
@@ -247,18 +301,20 @@ class Server:
             )
             #g_history.add_loss_centralized(server_round=0, loss=res[0])
             #g_history.add_metrics_centralized(server_round=0, metrics=res[1])
-        client_num = len(self._client_manager)
+        
         while len(self._client_manager) < 8:
-            client_num = len(self._client_manager)
+            continue
+        client_num = len(self._client_manager)
         print(client_num)
-
+        action_space = []
         fm = '{:0' + str(client_num) + 'b}'
         for i in range(pow(2, client_num)):
             b = fm.format(i)
             l = list(map(int, b))
             if l.count(1) >= client_num/3:
-                self.env.action_space.append(l)
-        
+                action_space.append(l)
+        self.env.action_space = action_space
+        print(len(self.env.action_space))
         print(self.env.action_space)
         self.env.action = self.env.action_space[-1]
 
@@ -268,78 +324,122 @@ class Server:
         start_time = timeit.default_timer()
         log(INFO, "FL starting round")
 
+                    ############    ####          
+                    ############    ####
+                    ####            ####
+                    ####            ####
+        ########    ############    ####            ########
+        ########    ############    ####            ########
+                    ####            ####
+                    ####            ####
+                    ####            ############
+                    ####            ############
+
+        # pre-train 2 rounds
         for current_round in range(1, 3): #1, num_rounds + 1
             
             log(INFO, f'current_round: {current_round}')
             # Train model and replace previous global model
 
             #g_current_round = current_round
-
+            
             log(INFO, "training")
             res_fit = self.fit_round(server_round=current_round, timeout=timeout)
             if res_fit:
                 parameters_prime, _, _ = res_fit  # fit_metrics_aggregated
                 if parameters_prime:
                     self.parameters = parameters_prime
+        
+        self.env.matrix = self._client_manager.build_distance_matrix()
 
-            # #Evaluate model using strategy implementation
-            # log(INFO, "Evaluate 1")
-            # res_cen = self.strategy.evaluate(current_round, parameters=self.parameters)
-            # if res_cen is not None:
-            #     loss_cen, metrics_cen = res_cen
-            #     log(
-            #         INFO,
-            #         "fit progress: (%s, %s, %s, %s)",
-            #         current_round,
-            #         loss_cen,
-            #         metrics_cen,
-            #         timeit.default_timer() - start_time,
-            #     )
-            #     g_history.add_loss_centralized(server_round=current_round, loss=loss_cen)
-            #     g_history.add_metrics_centralized(
-            #         server_round=current_round, metrics=metrics_cen
-            #     )
-
-            # # Evaluate model on a sample of available clients
-            # log(INFO, "Evaluate 2")
-            # res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
-            # if res_fed:
-            #     loss_fed, evaluate_metrics_fed, _ = res_fed
-            #     if loss_fed:
-            #         g_history.add_loss_distributed(
-            #             server_round=current_round, loss=loss_fed
-            #         )
-            #         g_history.add_metrics_distributed(
-            #             server_round=current_round, metrics=evaluate_metrics_fed
-            #         )
-
-                
-                ############    ####          
-                ############    ####
-                ####            ####
-                ####            ####
-    ########    ############    ####            ########
-    ########    ############    ####            ########
-                ####            ####
-                ####            ####
-                ####            ############
-                ####            ############
-
+        log(INFO, "Evaluate 2")
+        res_fed = self.evaluate_round(server_round=g_current_round, timeout=timeout)
+        if res_fed:
+            print(f'ACC: {res_fed[-1][-2][-1][-1].metrics["accuracy"]}')
+            loss_fed, evaluate_metrics_fed, _ = res_fed
+            acc = res_fed[-1][-2][-1][-1].metrics['accuracy']
+            self.env.init_acc = acc 
+            print(f'env.init_acc: {self.env.init_acc}')
+       
+         
         self.env.server = self
-        self.env.state = self._client_manager.build_distance_matrix().flatten()
-        state_len = len(self.env.state)
+        print(self.env.matrix)
+        state = []
+        for m in self.env.matrix:
+            state.append(np.mean(m))
+        self.env.init_state = state
+
+        state_len = len(self.env.init_state)
         action_len = len(self.env.action_space)
         #print(np.shape(self.env.state))
         #print(state_len, action_len)
         fl_model = self.env.build_model(state_len, action_len)
         dqn = self.env.build_agent(fl_model, action_len)
         dqn.compile(Adam(lr=1e-3), metrics=['mae'])
-        dqn.fit(self.env, nb_steps=num_rounds, visualize=False, verbose=1)
-        print("SCORES")
-        scores = dqn.test(self.env, nb_episodes=3, visualize=False)
-        print(scores.history['episode_reward'])
-        print(np.mean(scores.history['episode_reward']))
 
+        # #Evaluate model using strategy implementation
+        # log(INFO, "Evaluate 1")
+        # res_cen = self.strategy.evaluate(current_round, parameters=self.parameters)
+        # if res_cen is not None:
+        #     loss_cen, metrics_cen = res_cen
+        #     log(
+        #         INFO,
+        #         "fit progress: (%s, %s, %s, %s)",
+        #         current_round,
+        #         loss_cen,
+        #         metrics_cen,
+        #         timeit.default_timer() - start_time,
+        #     )
+        #     g_history.add_loss_centralized(server_round=current_round, loss=loss_cen)
+        #     g_history.add_metrics_centralized(
+        #         server_round=current_round, metrics=metrics_cen
+        #     )
+
+        # # Evaluate model on a sample of available clients
+        # log(INFO, "Evaluate 2")
+        # res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
+        # if res_fed:
+        #     loss_fed, evaluate_metrics_fed, _ = res_fed
+        #     if loss_fed:
+        #         g_history.add_loss_distributed(
+        #             server_round=current_round, loss=loss_fed
+        #         )
+        #         g_history.add_metrics_distributed(
+        #             server_round=current_round, metrics=evaluate_metrics_fed
+        #         )
+            
+
+        if mode == "train":
+
+            print("TRAIN")
+            try:
+                dqn.fit(self.env, nb_steps=num_rounds, visualize=False, verbose=1)
+            except KeyboardInterrupt:
+                acc = g_history.acces_distributed
+                plot_acc_loss([a for _, a in acc])
+
+            # dt = datetime.datetime.now().strftime("%m%d_%H%M")
+            dqn.save_weights(f'dqn_weights.h5f', overwrite=True)
+
+                    ############    ############    ############    ############
+                    ############    ############    ############    ############
+                        ####        ####            ####                ####
+                        ####        ####            ####                ####
+        ########        ####        ############    ############        ####    ########
+        ########        ####        ############    ############        ####    ########
+                        ####        ####                    ####        ####    
+                        ####        ####                    ####        ####    
+                        ####        ############    ############        ####    
+                        ####        ############    ############        ####    
+
+        if mode == "test":
+            print("TEST")
+
+            dqn.load_weights('dqn_weights.h5f')
+
+            scores = dqn.test(self.env, nb_episodes=num_rounds, visualize=False)
+            print(f'SCORES: {scores.history["episode_reward"]}')
+            print(f'SCORE MEAN: {np.mean(scores.history["episode_reward"])}')
 
 
     ####################################################################################  
@@ -393,14 +493,14 @@ class Server:
             len(results),
             len(failures),
         )
-        #print(f'evaluate_round results: {results}')
+        # print(f'evaluate_round results: {results}')
         # Aggregate the evaluation results
         aggregated_result: Tuple[
             Optional[float],
             Dict[str, Scalar],
         ] = self.strategy.aggregate_evaluate(server_round, results, failures)
 
-        #print(list(aggregated_result))
+        # print(list(aggregated_result))
         loss_aggregated, metrics_aggregated = aggregated_result
         return loss_aggregated, metrics_aggregated, (results, failures)
 
@@ -487,6 +587,14 @@ class Server:
         log(INFO, "Received initial parameters from one random client")
         return get_parameters_res.parameters
 
+    def reset(self, timeout: Optional[float]):
+        """Get initial parameters from one of the available clients."""
+
+        log(INFO, "Reset client Parameter")
+        ins = ResetIns(config={})
+        clients = self._client_manager.clients
+        for cid in clients.keys():
+            clients[cid].reset(ins=ins, timeout=timeout)
 
 ######## main ########
 
@@ -650,11 +758,37 @@ def _handle_finished_future_after_evaluate(
     # Not successful, client returned a result where the status code is not OK
     failures.append(result)
 
+# def reset_clients(
+#     client_instructions: List[Tuple[ClientProxy, EvaluateIns]],
+#     max_workers: Optional[int],
+#     timeout: Optional[float],
+# ) -> EvaluateResultsAndFailures:
+#     """Evaluate parameters concurrently on all selected clients."""
+#     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+#         submitted_fs = {
+#             executor.submit(reset_client, client_proxy, timeout)
+#             for client_proxy, ins in client_instructions
+#         }
+#         finished_fs, _ = concurrent.futures.wait(
+#             fs=submitted_fs,
+#             timeout=None,  # Handled in the respective communication stack
+#        )
+
+
+# def reset_client(
+#     client: ClientProxy,
+#     timeout: Optional[float],
+# ) -> Tuple[ClientProxy, EvaluateRes]:
+#     """Evaluate parameters on a single client."""
+#     client.reset(timeout=timeout)
+
+
 def plot_acc_loss(acc):
     plt.plot(acc)
-    plt.title('Model accuracy')
-    plt.xlabel('Round')
-    plt.legend(['Train_acc'])
+    dt = datetime.datetime.now().strftime("%m/%d %H:%M")
+    plt.title(f'Model accuracy {g_mode} {dt}')
+    plt.xlabel('Episode')
+    plt.legend(['ACC'])
     x_major_locator=MultipleLocator(10)
     y_major_locator=MultipleLocator(0.1)
     #把y轴的刻度间隔设置为10，并存在变量里
@@ -664,8 +798,8 @@ def plot_acc_loss(acc):
     #把x轴的主刻度设置为1的倍数
     ax.yaxis.set_major_locator(y_major_locator)
     #把y轴的主刻度设置为10的倍数
-    #plt.xlim(-0.5,11)
+    #plt.xlim(-5,400)
     #把x轴的刻度范围设置为-0.5到11，因为0.5不满一个刻度间隔，所以数字不会显示出来，但是能看到一点空白
-    plt.ylim(0,1)
+    plt.ylim(-0.05,1)
     #把y轴的刻度范围设置为-5到110，同理，-5不会标出来，但是能看到一点空白
     plt.show()

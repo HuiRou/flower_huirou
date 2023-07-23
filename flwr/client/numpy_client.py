@@ -58,6 +58,22 @@ class NumPyClient(ABC):
             The local model parameters as a list of NumPy ndarrays.
         """
 
+    def reset(self, config: Dict[str, Scalar]) -> NDArrays:
+        """Return the current local model parameters.
+
+        Parameters
+        ----------
+        config : Config
+            Configuration parameters requested by the server.
+            This can be used to tell the client which parameters
+            are needed along with some Scalar attributes.
+
+        Returns
+        -------
+        parameters : NDArrays
+            The local model parameters as a list of NumPy ndarrays.
+        """
+    
     def fit(
         self, parameters: NDArrays, config: Dict[str, Scalar]
     ) -> Tuple[NDArrays, int, Dict[str, Scalar]]:
@@ -127,6 +143,11 @@ def has_get_properties(client: NumPyClient) -> bool:
 def has_get_parameters(client: NumPyClient) -> bool:
     """Check if NumPyClient implements get_parameters."""
     return type(client).get_parameters != NumPyClient.get_parameters
+
+def has_reset(client: NumPyClient) -> bool:
+    """Check if NumPyClient implements get_parameters."""
+    return type(client).get_parameters != NumPyClient.get_parameters
+
 
 
 def has_fit(client: NumPyClient) -> bool:

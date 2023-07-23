@@ -8,9 +8,15 @@ import copy
 #tf.keras.backend.set_image_data_format('channels_last')
 # Make TensorFlow log less verbose
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-client_num = int(sys.argv[1])
-client_id = int(sys.argv[2])
-print(f'{client_id}: {os.getpid()}')
+mode = str(sys.argv[1])
+client_num = int(sys.argv[2])
+client_id = int(sys.argv[3])
+#print(f'{client_id}: {os.getpid()}')
+warmup = 2
+rounds = 0
+past_acc = 0
+g_model = None
+init_acc = 0
 
 def model4cifar10():
     '''
@@ -68,7 +74,7 @@ def model4cifar10():
     Trainable params: 551,722
     Non-trainable params: 1,152 
     '''
-    num_classes = 10
+    num_classes = 8 # 10
     model = Sequential()
 
     model.add(layers.Conv2D(32, (3,3), padding='same', activation='relu', input_shape=(32,32,3)))
@@ -162,7 +168,7 @@ def data_load(client_id):
 model = model4cifar10()
 model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])
 (x_train, y_train), (x_test, y_test) = data_load(client_id)
-
+g_model = model
 # Define Flower client
 class CifarClient(fl.client.NumPyClient):
     def get_parameters(self, config):
@@ -171,21 +177,54 @@ class CifarClient(fl.client.NumPyClient):
         return result
 
     def fit(self, parameters, config):
-        model_bf = model
+        global warmup, rounds, g_model
+        #print(f'Client Round: {rounds}')
+
         model.set_weights(parameters)
         model.fit(x_train, y_train, epochs=2, batch_size=32)
         result = model.get_weights()
-        model.set_weights(model_bf.get_weights())
+        if rounds < warmup:
+            g_model.set_weights(model.get_weights())
+            rounds += 1
+        
+        # if mode == "train" and done: #reset
+        #     print('Fit Reset Model')
+        #     model.set_weights(g_model.get_weights())
+                
+        
         return result, len(x_train), {}
 
     def evaluate(self, parameters, config):
-        model_bf = model
+        global g_model, past_acc, init_acc, rounds
+
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
-        # print(f'client evaluate acc: {accuracy}')
-        model.set_weights(model_bf.get_weights())
-
+        # print(f'client evaluate acc: {accuracy}')       
+        if rounds == warmup:
+            init_acc = accuracy
+            #reset(rounds)
+            if client_id == 0:
+                print(f'init_acc on client: {init_acc}, round={rounds}')
+            rounds += 1
+        if mode == "train":
+            r = (accuracy - past_acc) * 100
+            if r > 0.5: #reset
+                if client_id == 0:
+                    print(f'Reset Model, reward = {r}')
+                model.set_weights(g_model.get_weights())
+                past_acc = init_acc
+            # else:   
+        past_acc = accuracy
+                         
         return loss, len(x_test), {"accuracy": accuracy}
+
+    # not for work ==
+    def reset(self, config):
+        global g_model
+        print('Reset Model')
+        model.set_weights(g_model.get_weights())
+        #result = model.get_weights()        
+        #return result
 
 # Start Flower client
 fl.client.start_numpy_client(server_address="192.168.50.179:8080", client=CifarClient())
