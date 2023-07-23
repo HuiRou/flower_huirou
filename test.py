@@ -157,9 +157,11 @@ def model4cifar10():
     model = Sequential()
 
     model.add(layers.Conv2D(32, (3,3), activation='relu', input_shape=(32,32,3))) # padding='same', 
-    model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(32, (3,3), activation='relu'))
-    model.add(layers.BatchNormalization())
+
+    model.add(layers.MaxPooling2D(pool_size=(2,2)))
+    #model.add(layers.BatchNormalization())
+    model.add(layers.Conv2D(64, (3,3), activation='relu')) # padding='same', 
+    #model.add(layers.BatchNormalization())
     model.add(layers.MaxPooling2D(pool_size=(2,2)))
     model.add(layers.Dropout(0.3))
 
@@ -179,7 +181,7 @@ def model4cifar10():
 
     model.add(layers.Flatten())
     model.add(layers.Dense(128, activation='relu'))
-    model.add(layers.BatchNormalization())
+    #model.add(layers.BatchNormalization())
     model.add(layers.Dropout(0.5))
     model.add(layers.Dense(num_classes, activation='softmax'))    # num_classes = 10
     model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])

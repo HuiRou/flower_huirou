@@ -13,10 +13,13 @@ client_num = int(sys.argv[2])
 client_id = int(sys.argv[3])
 #print(f'{client_id}: {os.getpid()}')
 warmup = 2
-rounds = 0
+g_rounds = 0
 past_acc = 0
 g_model = None
 init_acc = 0
+done = False
+g_episode = 0
+g_step = 0
 
 def model4cifar10():
     '''
@@ -73,30 +76,67 @@ def model4cifar10():
     Total params: 552,874
     Trainable params: 551,722
     Non-trainable params: 1,152 
+
+    ***NEW***
+
+    Model: "sequential"
+    _________________________________________________________________
+    Layer (type)                Output Shape              Param #   
+    =================================================================
+    conv2d (Conv2D)             (None, 30, 30, 32)        896       
+                                                                    
+    batch_normalization (BatchN  (None, 30, 30, 32)       128       
+    ormalization)                                                   
+                                                                    
+    conv2d_1 (Conv2D)           (None, 28, 28, 32)        9248      
+                                                                    
+    batch_normalization_1 (Batc  (None, 28, 28, 32)       128       
+    hNormalization)                                                 
+                                                                    
+    max_pooling2d (MaxPooling2D  (None, 14, 14, 32)       0         
+    )                                                               
+                                                                    
+    dropout (Dropout)           (None, 14, 14, 32)        0         
+                                                                    
+    flatten (Flatten)           (None, 6272)              0         
+                                                                    
+    dense (Dense)               (None, 128)               802944    
+                                                                    
+    batch_normalization_2 (Batc  (None, 128)              512       
+    hNormalization)                                                 
+                                                                    
+    dropout_1 (Dropout)         (None, 128)               0         
+                                                                    
+    dense_1 (Dense)             (None, 8)                 1032      
+                                                                    
+    =================================================================
+    Total params: 814,888
+    Trainable params: 814,504
+    Non-trainable params: 384
     '''
     num_classes = 8 # 10
     model = Sequential()
 
-    model.add(layers.Conv2D(32, (3,3), padding='same', activation='relu', input_shape=(32,32,3)))
+    model.add(layers.Conv2D(32, (3,3), activation='relu', input_shape=(32,32,3))) # padding='same', 
     model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(32, (3,3), padding='same', activation='relu'))
+    model.add(layers.Conv2D(64, (3,3), activation='relu')) # padding='same', 
     model.add(layers.BatchNormalization())
     model.add(layers.MaxPooling2D(pool_size=(2,2)))
     model.add(layers.Dropout(0.3))
 
-    model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.MaxPooling2D(pool_size=(2,2)))
-    model.add(layers.Dropout(0.5))
+    # model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.Conv2D(64, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.MaxPooling2D(pool_size=(2,2)))
+    # model.add(layers.Dropout(0.5))
 
-    model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.MaxPooling2D(pool_size=(2,2)))
-    model.add(layers.Dropout(0.5))
+    # model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.Conv2D(128, (3,3), padding='same', activation='relu'))
+    # model.add(layers.BatchNormalization())
+    # model.add(layers.MaxPooling2D(pool_size=(2,2)))
+    # model.add(layers.Dropout(0.5))
 
     model.add(layers.Flatten())
     model.add(layers.Dense(128, activation='relu'))
@@ -105,7 +145,7 @@ def model4cifar10():
     model.add(layers.Dense(num_classes, activation='softmax'))    # num_classes = 10
 
     # Checking the model summary
-    #model.summary()
+    # model.summary()
     return model
 
 def isNum(s):
@@ -177,15 +217,16 @@ class CifarClient(fl.client.NumPyClient):
         return result
 
     def fit(self, parameters, config):
-        global warmup, rounds, g_model
+        global warmup, g_rounds, g_model
         #print(f'Client Round: {rounds}')
 
         model.set_weights(parameters)
         model.fit(x_train, y_train, epochs=2, batch_size=32)
         result = model.get_weights()
-        if rounds < warmup:
-            g_model.set_weights(model.get_weights())
-            rounds += 1
+        if mode == "train":
+            if warmup > 0:
+                g_model.set_weights(model.get_weights())
+                warmup -= 1
         
         # if mode == "train" and done: #reset
         #     print('Fit Reset Model')
@@ -195,27 +236,44 @@ class CifarClient(fl.client.NumPyClient):
         return result, len(x_train), {}
 
     def evaluate(self, parameters, config):
-        global g_model, past_acc, init_acc, rounds
-
+        global g_model, past_acc, init_acc, g_rounds, done, g_episode, g_step, warmup
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
-        # print(f'client evaluate acc: {accuracy}')       
-        if rounds == warmup:
-            init_acc = accuracy
-            #reset(rounds)
-            if client_id == 0:
-                print(f'init_acc on client: {init_acc}, round={rounds}')
-            rounds += 1
-        if mode == "train":
-            r = (accuracy - past_acc) * 100
-            if r > 0.5: #reset
+        # print(f'client evaluate acc: {accuracy}')  
+        if mode == "train":     
+            if warmup == 0:
+                init_acc = accuracy
+                past_acc = accuracy
+                #reset(rounds)
                 if client_id == 0:
-                    print(f'Reset Model, reward = {r}')
-                model.set_weights(g_model.get_weights())
-                past_acc = init_acc
-            # else:   
-        past_acc = accuracy
-                         
+                    print(f'init_acc on client: {init_acc}, w={warmup}')
+                warmup -= 1   
+
+            else:         
+                r = (accuracy - past_acc) * 100 -100
+
+                if client_id == 0:
+                    print(f'Client: r={g_rounds}, e={g_episode}, s={g_step}, acc={accuracy}, pa={past_acc}, rw={r}')
+
+                if accuracy >= (1 + g_rounds)/100:#r >= 0 or g_step >= 9: #reset step-1
+                    done = True
+                else:               
+                    done = False
+                
+                if done:
+                    if client_id == 0:
+                        print(f'Reset Model, reward = {r}')
+                    model.set_weights(g_model.get_weights())
+                    #past_acc = init_acc
+                    past_acc = accuracy
+                    done = False
+                    g_episode += 1
+                    g_step = 0
+                else:         
+                    past_acc = accuracy
+                    g_step += 1       
+
+                g_rounds += 1      
         return loss, len(x_test), {"accuracy": accuracy}
 
     # not for work ==

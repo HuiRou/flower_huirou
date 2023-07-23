@@ -80,6 +80,8 @@ g_current_round = 0
 g_num_round = 0
 g_history = None
 g_mode = None
+g_step = 0
+g_episode = 0
 
 class SelectEnv:
     def __init__(self):
@@ -114,10 +116,10 @@ class SelectEnv:
         global g_current_round
         global g_num_round
         global g_mode
-        
-        g_current_round += 1
-        self.count += 1
-        log(INFO, f'training (ROUND: {g_current_round}, COUNT: {self.count})')
+        global g_step
+        global g_episode
+        #self.count += 1
+        log(INFO, f'training (ROUND: {g_current_round})')
        
        
         res_fit = self.server.fit_round(server_round=g_current_round, timeout=g_timeout)
@@ -136,6 +138,9 @@ class SelectEnv:
             
             g_history.add_acc_distributed(
                 server_round=g_current_round, acc=acc
+            )
+            g_history.add_cnt_distributed(
+                server_round=g_current_round, cnt=self.action.count(1)
             )
             if g_mode == 'train':
                 g_history.add_train_action_distributed(
@@ -164,42 +169,37 @@ class SelectEnv:
                 ####    ####     ############
                 ####    ####     ############
 
-        reward = (acc-self.acc)*100
+        reward = (acc-self.acc)*100 - 100
 
         states = []
         
+        print(f'Server: r={g_current_round}, e={g_episode}, s={g_step}, acc={acc}, pa={self.acc}, rw={reward}')
         # Check if is done
-        if reward > 0.5: # or self.count >= 10
-            print(f'ROUND: {g_current_round}, REWARD: {reward}')            
-           
+        if acc >= (1 + g_rounds)/100:#reward >= 0 or g_step >= 9: # or self.count >= 10          
+            print("done!")
             # g_current_round += 1
-            self.acc = acc
-            # self.count = 0
-            # for m in self.matrix:
-            #     s = [m[i] for i in range(len(self.matrix)) if self.action[i] == 1]
-            #     #print(s, np.sum(s))
-            #     states.append(np.mean(s))
-            # print(f'NEXT_STATE = {states}')
             done = True
-        # elif self.count >= 3:
-        #     print(f'ROUND: {g_current_round}, REWARD: {reward}')
-        #     g_history.add_acc_distributed(
-        #         server_round=g_current_round, acc=acc
-        #     )
-        #     g_current_round += 1
-        #     self.count = 0
-        #     done = True
         else:
             #self.count -= 1
             #g_current_round -= 1
             #states = self.state
             done = False
-        
+
+        if done:
+            g_step = 0
+            g_episode += 1
+            #self.acc = self.init_acc
+            self.acc = acc
         # Apply temperature noise
         # self.state += random.randint(-1,1)
         # Set placeholder for info
+        else:
+            g_step += 1
+            self.acc = acc
+
         info = {}
 
+        g_current_round += 1
         for m in self.matrix:
             s = [m[i] for i in range(len(self.matrix)) if self.action[i] == 1]
             #print(s, np.sum(s))
@@ -230,7 +230,7 @@ class SelectEnv:
         model.add(Flatten(input_shape=(1,states)))
         model.add(Dense(24, activation='relu'))
         model.add(Dense(24, activation='relu'))
-        model.add(Dense(actions, activation='linear'))
+        model.add(Dense(actions, activation='softmax'))
         return model
 
     def build_agent(self, model, actions):
@@ -336,7 +336,8 @@ class Server:
                     ####            ############
 
         # pre-train 2 rounds
-        for current_round in range(1, 3): #1, num_rounds + 1
+    
+        for current_round in range(0, 2): #1, num_rounds + 1
             
             log(INFO, f'current_round: {current_round}')
             # Train model and replace previous global model
@@ -359,9 +360,10 @@ class Server:
             loss_fed, evaluate_metrics_fed, _ = res_fed
             acc = res_fed[-1][-2][-1][-1].metrics['accuracy']
             self.env.init_acc = acc 
+            self.env.acc = acc
             print(f'env.init_acc: {self.env.init_acc}')
-       
-         
+    
+        
         self.env.server = self
         print(self.env.matrix)
         state = []
@@ -377,40 +379,7 @@ class Server:
         dqn = self.env.build_agent(fl_model, action_len)
         dqn.compile(Adam(lr=1e-3), metrics=['mae'])
 
-        # #Evaluate model using strategy implementation
-        # log(INFO, "Evaluate 1")
-        # res_cen = self.strategy.evaluate(current_round, parameters=self.parameters)
-        # if res_cen is not None:
-        #     loss_cen, metrics_cen = res_cen
-        #     log(
-        #         INFO,
-        #         "fit progress: (%s, %s, %s, %s)",
-        #         current_round,
-        #         loss_cen,
-        #         metrics_cen,
-        #         timeit.default_timer() - start_time,
-        #     )
-        #     g_history.add_loss_centralized(server_round=current_round, loss=loss_cen)
-        #     g_history.add_metrics_centralized(
-        #         server_round=current_round, metrics=metrics_cen
-        #     )
-
-        # # Evaluate model on a sample of available clients
-        # log(INFO, "Evaluate 2")
-        # res_fed = self.evaluate_round(server_round=current_round, timeout=timeout)
-        # if res_fed:
-        #     loss_fed, evaluate_metrics_fed, _ = res_fed
-        #     if loss_fed:
-        #         g_history.add_loss_distributed(
-        #             server_round=current_round, loss=loss_fed
-        #         )
-        #         g_history.add_metrics_distributed(
-        #             server_round=current_round, metrics=evaluate_metrics_fed
-        #         )
-            
-
-        if mode == "train":
-
+        if g_mode == "train":
             print("TRAIN")
             try:
                 dqn.fit(self.env, nb_steps=num_rounds, visualize=False, verbose=1)
@@ -418,8 +387,8 @@ class Server:
                 acc = g_history.acces_distributed
                 plot_acc_loss([a for _, a in acc])
 
-            # dt = datetime.datetime.now().strftime("%m%d_%H%M")
-            dqn.save_weights(f'dqn_weights.h5f', overwrite=True)
+                # dt = datetime.datetime.now().strftime("%m%d_%H%M")
+                dqn.save_weights(f'dqn_weights.h5f', overwrite=True)
 
                     ############    ############    ############    ############
                     ############    ############    ############    ############
@@ -441,6 +410,30 @@ class Server:
             print(f'SCORES: {scores.history["episode_reward"]}')
             print(f'SCORE MEAN: {np.mean(scores.history["episode_reward"])}')
 
+            # fedavg
+            # for current_round in range(0, num_rounds): #1, num_rounds + 1
+            
+            #     log(INFO, f'current_round: {current_round}')
+            #     # Train model and replace previous global model
+
+            #     #g_current_round = current_round
+                
+            #     log(INFO, "training")
+            #     res_fit = self.fit_round(server_round=current_round, timeout=timeout)
+            #     if res_fit:
+            #         parameters_prime, _, _ = res_fit  # fit_metrics_aggregated
+            #         if parameters_prime:
+            #             self.parameters = parameters_prime        
+
+            #     log(INFO, "Evaluate 2")
+            #     res_fed = self.evaluate_round(server_round=g_current_round, timeout=timeout)
+            #     if res_fed:
+            #         print(f'ACC: {res_fed[-1][-2][-1][-1].metrics["accuracy"]}')
+            #         loss_fed, evaluate_metrics_fed, _ = res_fed
+            #         acc = res_fed[-1][-2][-1][-1].metrics['accuracy']
+            #         g_history.add_acc_distributed(
+            #         server_round=g_current_round, acc=acc
+            # )
 
     ####################################################################################  
 
@@ -787,7 +780,7 @@ def plot_acc_loss(acc):
     plt.plot(acc)
     dt = datetime.datetime.now().strftime("%m/%d %H:%M")
     plt.title(f'Model accuracy {g_mode} {dt}')
-    plt.xlabel('Episode')
+    plt.xlabel('Round')
     plt.legend(['ACC'])
     x_major_locator=MultipleLocator(10)
     y_major_locator=MultipleLocator(0.1)

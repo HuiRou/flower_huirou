@@ -1,9 +1,9 @@
 #!/bin/bash
 
 client_num=8
-comm_round=25
-mode=train
-#mode=test
+comm_round=100
+#mode=train
+mode=test
 
 
 echo "Starting server"
