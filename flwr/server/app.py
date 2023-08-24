@@ -191,11 +191,13 @@ def _fl(
     # Fit model
     hist = server.fit(mode=config.mode, num_rounds=config.num_rounds, timeout=config.round_timeout)
     #log(INFO, "app_fit: losses_distributed %s", str(hist.losses_distributed))
-    log(INFO, "app_fit: acces_distributed %s", str(hist.acces_distributed))
+    # log(INFO, "app_fit: acces_distributed %s", str(hist.acces_distributed))
+    # log(INFO, "app_fit: cntes_distributed %s", str(hist.cntes_distributed))
+    # log(INFO, "app_fit: epes_distributed %s", str(hist.epes_distributed))
     s = '\n'
     #ac = s.join(map(str, hist.train_actions_distributed))
-    log(INFO, "app_fit: train_actions_distributed\n %s", str(s.join(map(str, hist.train_actions_distributed))))
-    log(INFO, "app_fit: test_actions_distributed\n %s", str(s.join(map(str, hist.test_actions_distributed))))
+    # log(INFO, "app_fit: train_actions_distributed\n %s", str(s.join(map(str, hist.train_actions_distributed))))
+    # log(INFO, "app_fit: test_actions_distributed\n %s", str(s.join(map(str, hist.test_actions_distributed))))
 
     #log(INFO, "app_fit: metrics_distributed %s", str(hist.metrics_distributed))
     

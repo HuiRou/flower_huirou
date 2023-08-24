@@ -114,6 +114,7 @@ class SimpleClientManager(ClientManager):
 
     def __init__(self) -> None:
         self.clients: Dict[str, ClientProxy] = {}
+        self.order: Dict[str, ClientProxy] = {}
         self._cv = threading.Condition()
 
     def __len__(self) -> int:
@@ -238,7 +239,7 @@ class SimpleClientManager(ClientManager):
 
     def build_distance_matrix(self):
         log(INFO, "build_distance_matrix")   
-        # print(self.clients)     
+        # print(self.clients)
         print(self.clients.keys())
         ins = GetParametersIns(config={})
         weight = []

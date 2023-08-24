@@ -156,6 +156,7 @@ def isNum(s):
         return False
 
 def data_load(client_id):
+    global mode
 
     user_test_data = True
 
@@ -177,7 +178,7 @@ def data_load(client_id):
         imbal_class_counts = [0, 0, 0, 0, 3000, 3000, 0, 0, 0, 0]
     else:
         imbal_class_counts = [0, 0, 0, 0, 0, 0, 3000, 3000, 0, 0]
-    print(imbal_class_counts)
+    #print(imbal_class_counts)
 
     # Get class indices
     class_indices = [np.where(y_train == i)[0] for i in range(nb_classes)]
@@ -194,7 +195,17 @@ def data_load(client_id):
     # test data
     if user_test_data == True:
         class_indices = [np.where(y_test == i)[0] for i in range(nb_classes)]
+        # if mode == 'train':
         test_imbal_class_counts = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 0, 0]
+        # else:
+        # if(client_id < 2):
+        #     test_imbal_class_counts = [1000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        # elif(client_id < 4):
+        #     test_imbal_class_counts = [0, 0, 1000, 0, 0, 0, 0, 0, 0, 0]
+        # elif(client_id < 6):
+        #     test_imbal_class_counts = [0, 0, 0, 0, 1000, 0, 0, 0, 0, 0]
+        # else:
+        #     test_imbal_class_counts = [0, 0, 0, 0, 0, 0, 1000, 0, 0, 0]
         test_imbal_class_indices = [class_idx[:class_count] for class_idx, class_count in zip(class_indices, test_imbal_class_counts)]
         test_imbal_class_indices = np.hstack(test_imbal_class_indices)
         y_test = y_test[test_imbal_class_indices]
@@ -218,10 +229,18 @@ class CifarClient(fl.client.NumPyClient):
 
     def fit(self, parameters, config):
         global warmup, g_rounds, g_model
+
+        try:
+            if config['reset']:
+                model.set_weights(g_model.get_weights())
+                accuracy = 0
+                return model.get_weights(), len(x_train), {"accuracy": accuracy}
+        except KeyError:
+            pass
         #print(f'Client Round: {rounds}')
 
         model.set_weights(parameters)
-        model.fit(x_train, y_train, epochs=2, batch_size=32)
+        his = model.fit(x_train, y_train, epochs=2, batch_size=32)
         result = model.get_weights()
         if mode == "train":
             if warmup > 0:
@@ -232,51 +251,54 @@ class CifarClient(fl.client.NumPyClient):
         #     print('Fit Reset Model')
         #     model.set_weights(g_model.get_weights())
                 
-        
-        return result, len(x_train), {}
+        accuracy = max(his.history['accuracy'])
+        return result, len(x_train), {"accuracy": accuracy, "id": client_id}
 
     def evaluate(self, parameters, config):
         global g_model, past_acc, init_acc, g_rounds, done, g_episode, g_step, warmup
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
-        # print(f'client evaluate acc: {accuracy}')  
-        if mode == "train":     
-            if warmup == 0:
-                init_acc = accuracy
-                past_acc = accuracy
-                #reset(rounds)
-                if client_id == 0:
-                    print(f'init_acc on client: {init_acc}, w={warmup}')
-                warmup -= 1   
+        print(f'client evaluate acc: {accuracy}')  
+        
+#         if warmup == 0:
+#             init_acc = accuracy
+#             past_acc = accuracy
+#             #reset(rounds)
+#             if client_id == 0:
+#                 print(f'init_acc on client: {init_acc} w={warmup}')
+#             warmup -= 1   
 
-            else:         
-                r = (accuracy - past_acc) * 100 -100
+#         else:         
+#             r = (accuracy - past_acc) * 100
 
-                if client_id == 0:
-                    print(f'Client: r={g_rounds}, e={g_episode}, s={g_step}, acc={accuracy}, pa={past_acc}, rw={r}')
+#             #if client_id == 0:
+#             print(f'Client: {client_id} / r={g_rounds} / e={g_episode} / s={g_step} / acc={accuracy} / pa={past_acc} / rw={r}')
 
-                if accuracy >= (1 + g_rounds)/100:#r >= 0 or g_step >= 9: #reset step-1
-                    done = True
-                else:               
-                    done = False
-                
-                if done:
-                    if client_id == 0:
-                        print(f'Reset Model, reward = {r}')
-                    model.set_weights(g_model.get_weights())
-                    #past_acc = init_acc
-                    past_acc = accuracy
-                    done = False
-                    g_episode += 1
-                    g_step = 0
-                else:         
-                    past_acc = accuracy
-                    g_step += 1       
+# ##################################################################################################################
 
-                g_rounds += 1      
+#             if accuracy > 0.45:
+#                 done = True
+#             else:               
+#                 done = False
+            
+#             if done:
+#                 #if client_id == 0:
+#                     #print(f'Reset Model, reward = {r}')
+#                 if mode == 'train':
+#                     model.set_weights(g_model.get_weights())
+#                 past_acc = accuracy
+#                 #past_acc = init_acc
+#                 done = False
+#                 g_episode += 1
+#                 g_step = 0
+#             else:         
+#                 past_acc = accuracy
+#                 g_step += 1       
+
+#             g_rounds += 1      
         return loss, len(x_test), {"accuracy": accuracy}
 
-    # not for work ==
+    # not for work==
     def reset(self, config):
         global g_model
         print('Reset Model')

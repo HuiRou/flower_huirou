@@ -27,7 +27,13 @@ class History:
         self.losses_distributed: List[Tuple[int, float]] = []
         self.losses_centralized: List[Tuple[int, float]] = []
         self.acces_distributed: List[Tuple[int, float]] = []
+
+
         self.cntes_distributed: List[Tuple[int, int]] = []
+        self.epes_distributed: List[Tuple[int, int]] = []
+
+
+
         self.acces_centralized: List[Tuple[int, float]] = []
         
         self.train_actions_distributed: List[Tuple[int, list]] = []
@@ -51,6 +57,10 @@ class History:
     def add_cnt_distributed(self, server_round: int, cnt: int) -> None:
         """Add one acc entry (from distributed evaluation)."""
         self.cntes_distributed.append((server_round, cnt))
+
+    def add_ep_distributed(self, server_round: int, ep: int) -> None:
+        """Add one acc entry (from distributed evaluation)."""
+        self.epes_distributed.append((server_round, ep))
 
     def add_acc_centralized(self, server_round: int, acc: float) -> None:
         """Add one acc entry (from centralized evaluation)."""

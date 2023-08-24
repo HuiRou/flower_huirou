@@ -1,9 +1,10 @@
 #!/bin/bash
 
-client_num=8
-comm_round=100
-#mode=train
-mode=test
+client_num=200
+mode=train
+#mode=test
+#mode=avg
+#mode=random
 
 
 echo "Starting server"
