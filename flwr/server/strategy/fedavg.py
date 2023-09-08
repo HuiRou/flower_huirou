@@ -187,11 +187,12 @@ class FedAvg(Strategy):
         sample_size, min_num_clients = self.num_fit_clients(
             client_manager.num_available()
         )
-        # sample_size = random.randint(2,8)
+        # sample_size = random.randint(1,8) #1~8
+        # sample_size = 2
         # clients = client_manager.sample(
         #     num_clients=sample_size, min_num_clients=min_num_clients
         # )
-        #print(clients)
+        
         clients = client_manager.sample_selection(
             num_clients=sample_size, min_num_clients=min_num_clients, selection=selection
         )

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-client_num=200
+client_num=8
+comm_round=100
 mode=train
 #mode=test
 #mode=avg

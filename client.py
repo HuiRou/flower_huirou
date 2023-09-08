@@ -246,11 +246,7 @@ class CifarClient(fl.client.NumPyClient):
             if warmup > 0:
                 g_model.set_weights(model.get_weights())
                 warmup -= 1
-        
-        # if mode == "train" and done: #reset
-        #     print('Fit Reset Model')
-        #     model.set_weights(g_model.get_weights())
-                
+         
         accuracy = max(his.history['accuracy'])
         return result, len(x_train), {"accuracy": accuracy, "id": client_id}
 
@@ -259,52 +255,7 @@ class CifarClient(fl.client.NumPyClient):
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
         print(f'client evaluate acc: {accuracy}')  
-        
-#         if warmup == 0:
-#             init_acc = accuracy
-#             past_acc = accuracy
-#             #reset(rounds)
-#             if client_id == 0:
-#                 print(f'init_acc on client: {init_acc} w={warmup}')
-#             warmup -= 1   
-
-#         else:         
-#             r = (accuracy - past_acc) * 100
-
-#             #if client_id == 0:
-#             print(f'Client: {client_id} / r={g_rounds} / e={g_episode} / s={g_step} / acc={accuracy} / pa={past_acc} / rw={r}')
-
-# ##################################################################################################################
-
-#             if accuracy > 0.45:
-#                 done = True
-#             else:               
-#                 done = False
-            
-#             if done:
-#                 #if client_id == 0:
-#                     #print(f'Reset Model, reward = {r}')
-#                 if mode == 'train':
-#                     model.set_weights(g_model.get_weights())
-#                 past_acc = accuracy
-#                 #past_acc = init_acc
-#                 done = False
-#                 g_episode += 1
-#                 g_step = 0
-#             else:         
-#                 past_acc = accuracy
-#                 g_step += 1       
-
-#             g_rounds += 1      
         return loss, len(x_test), {"accuracy": accuracy}
-
-    # not for work==
-    def reset(self, config):
-        global g_model
-        print('Reset Model')
-        model.set_weights(g_model.get_weights())
-        #result = model.get_weights()        
-        #return result
 
 # Start Flower client
 fl.client.start_numpy_client(server_address="192.168.50.179:8080", client=CifarClient())

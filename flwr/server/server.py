@@ -102,7 +102,7 @@ class SelectEnv:
         # self.action = self.action_space[-1]
         print(f'\naction: {action, self.action}')
 
-        #FEDAVG
+        #FEDAVG/RD
         #agg_models = [models[i] for i in range(len(actions)) if actions[i] == 1]
         #parameters_aggregated = aggregate(agg_models)     
         #global global_model   
@@ -136,9 +136,6 @@ class SelectEnv:
             #print(f'ACC: {res_fed[-1][-2][-1][-1].metrics["accuracy"]}')
             loss_fed, acc_fed, evaluate_metrics_fed, _ = res_fed
             print(f'ACC:{acc_fed}')
-            # if g_mode == 'train':
-            #     acc = res_fed[-1][-2][-1][-1].metrics['accuracy']
-            # if g_mode == 'test':
             acc = acc_fed
 
             g_history.add_acc_distributed(
@@ -157,13 +154,6 @@ class SelectEnv:
                 g_history.add_test_action_distributed(
                     server_round=g_current_round, action=a
                 )
-
-        # Calculate reward
-        #if accuracy >= self.acc and self.state <=39: 
-        #    reward =1 
-        #else: 
-        #    reward = -1 
-        # print(f'loss: {loss_fed}')
                 
                 ##########       ####          
                 ###########      ####
@@ -182,7 +172,6 @@ class SelectEnv:
         states = []
         
         print(f'Server: r={g_current_round}, e={g_episode}, s={g_step}, acc={acc}, pa={self.acc}, rw={reward}')
-        #if g_step == 0:
             
         # Check if is done ######################################################################################
         if g_mode == "test":
@@ -198,9 +187,6 @@ class SelectEnv:
             # g_current_round += 1
             done = True
         else:
-            #self.count -= 1
-            #g_current_round -= 1
-            #states = self.state
             done = False
 
         if done:
@@ -208,9 +194,6 @@ class SelectEnv:
             g_episode += 1
             #self.acc = self.init_acc
             self.acc = acc
-        # Apply temperature noise
-        # self.state += random.randint(-1,1)
-        # Set placeholder for info
         else:
             g_step += 1
             self.acc = acc
@@ -223,8 +206,6 @@ class SelectEnv:
             states.append(np.mean(s))
         states.append(acc)
         print(f'NEXT_STATE = {states}')
-        # states = self.server._client_manager.build_distance_matrix().flatten()
-        # Return step information
         return states, reward, done, info
 
     def render(self):
@@ -232,10 +213,6 @@ class SelectEnv:
         pass
     
     def reset(self):
-        # Reset shower temperature
-        #self.state = 38 + random.randint(-3,3)
-        # Reset shower time
-        #self.shower_length = 60
         global g_timeout
         self.server.reset(timeout=g_timeout)
         #print(f'now acc: {self.acc} / init_acc: {self.init_acc}')
@@ -352,7 +329,7 @@ class Server:
                     ####            ############
                     ####            ############
 
-        # pre-train 2 rounds
+
         if g_mode == "avg":
             print("AVG")
             for current_round in range(0, num_rounds): #1, num_rounds + 1
@@ -426,11 +403,7 @@ class Server:
                 if res_fit:
                     parameters_prime, metric_fed, (result, failure) = res_fit  # fit_metrics_aggregated
                     if parameters_prime:
-                        self.parameters = parameters_prime
-                    # acc = metric_fed['accuracy']      
-                    # self.env.init_acc = acc 
-                    # self.env.acc = acc
-                    # print(f'env.init_acc: {self.env.init_acc}')                  
+                        self.parameters = parameters_prime      
             
             self._client_manager.order = {
                 client_proxy.cid:fit_res.metrics['id']
@@ -495,10 +468,10 @@ class Server:
             if g_mode == "test":
                 print("TEST")
                 #fn = f'{dt}/dqn_weights.h5f'
-                fn = f'0824_0558/dqn_weights.h5f'
+                fn = f'0905_1154/dqn_weights.h5f'
                 dqn.load_weights(fn)
 
-                scores = dqn.test(self.env, nb_episodes=1, visualize=False,nb_max_episode_steps=num_rounds)
+                scores = dqn.test(self.env, nb_episodes=1, visualize=False,nb_max_episode_steps=100)
                 print(f'SCORES: {scores.history["episode_reward"]}')
                 print(f'SCORE MEAN: {np.mean(scores.history["episode_reward"])}')
             
@@ -829,30 +802,6 @@ def _handle_finished_future_after_evaluate(
 
     # Not successful, client returned a result where the status code is not OK
     failures.append(result)
-
-# def reset_clients(
-#     client_instructions: List[Tuple[ClientProxy, EvaluateIns]],
-#     max_workers: Optional[int],
-#     timeout: Optional[float],
-# ) -> EvaluateResultsAndFailures:
-#     """Evaluate parameters concurrently on all selected clients."""
-#     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-#         submitted_fs = {
-#             executor.submit(reset_client, client_proxy, timeout)
-#             for client_proxy, ins in client_instructions
-#         }
-#         finished_fs, _ = concurrent.futures.wait(
-#             fs=submitted_fs,
-#             timeout=None,  # Handled in the respective communication stack
-#        )
-
-
-# def reset_client(
-#     client: ClientProxy,
-#     timeout: Optional[float],
-# ) -> Tuple[ClientProxy, EvaluateRes]:
-#     """Evaluate parameters on a single client."""
-#     client.reset(timeout=timeout)
 
 
 def plot_acc_loss(acc_list, ep_list):
