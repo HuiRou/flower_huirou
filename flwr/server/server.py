@@ -468,7 +468,7 @@ class Server:
             if g_mode == "test":
                 print("TEST")
                 #fn = f'{dt}/dqn_weights.h5f'
-                fn = f'0905_1154/dqn_weights.h5f'
+                fn = f'0817_1516/dqn_weights.h5f'
                 dqn.load_weights(fn)
 
                 scores = dqn.test(self.env, nb_episodes=1, visualize=False,nb_max_episode_steps=100)
